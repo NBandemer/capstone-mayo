@@ -1,3 +1,6 @@
-/data
 .python-version
 /results
+/logs
+src/test.py
+data
+saved_models

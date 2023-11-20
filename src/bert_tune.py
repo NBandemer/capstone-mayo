@@ -1,15 +1,22 @@
 from transformers import BertForSequenceClassification, BertTokenizer, TrainingArguments, Trainer
 import pandas as pd
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from sklearn.model_selection import train_test_split
+
 import torch
 from torch.optim import AdamW
 from torch.utils.data import Dataset
+
+import sys
+import datetime
+import os
 
 tokenizer = BertTokenizer.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
 model = BertForSequenceClassification.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
 
 no_decay = ['bias', 'LayerNorm.weight']
 optimizer_grouped_parameters = [
@@ -18,7 +25,7 @@ optimizer_grouped_parameters = [
 ]
 optimizer = AdamW(optimizer_grouped_parameters, lr=1e-5)
 
-dataset = pd.read_csv("data/PREPROCESSED-NOTES.csv")
+dataset = pd.read_csv("data\clean\PREPROCESSED-NOTES.csv")
 
 text_data = dataset["text"].to_list()
 sdoh_data = dataset["sdoh_community_present"].to_list()
@@ -31,11 +38,6 @@ max_seq_length = 100 #512
 # Truncate and tokenize your input data
 train_encodings = tokenizer(X_train, truncation=True, padding='max_length', max_length=max_seq_length, return_tensors='pt')
 val_encodings = tokenizer(X_val, truncation=True, padding='max_length', max_length=max_seq_length, return_tensors='pt')
-
-# print(X_train[0])
-# print("Divider!!!!!!!!!!!!!!!!!!!!!!!!!!")
-# first_row = {key: value[0] for key, value in train_encodings.items()}
-# print(first_row)
 
 class DataLoader(Dataset):
     def __init__(self, encodings, labels):
@@ -66,28 +68,57 @@ val_dataset = DataLoader(
     y_val
 )
 
+timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+tensor_logs = f'./logs/tensor_logs/logs_{timestamp}'
+os.makedirs(tensor_logs, exist_ok=True)
+
+epoch_logs = f'./logs/epoch_logs/logs_{timestamp}'
+os.makedirs(epoch_logs, exist_ok=True)
+
+def compute_metrics(eval_pred):
+    labels = eval_pred.label_ids
+    preds = eval_pred.predictions.argmax(-1)
+    precision = precision_score(labels, preds, average='weighted')
+    recall = recall_score(labels, preds, average='weighted')
+    f1 = f1_score(labels, preds, average='weighted')
+    acc = accuracy_score(labels, preds)
+    return {
+        'accuracy': acc,
+        'f1': f1,
+        'precision': precision,
+        'recall': recall
+    }
+
 training_args = TrainingArguments(
-    output_dir='./results',          
-    num_train_epochs=7,              
+    output_dir=epoch_logs,
+    logging_strategy='epoch',
+    num_train_epochs=4,
     per_device_train_batch_size=16,  
     per_device_eval_batch_size=64,   
-    warmup_steps=500,                
-    weight_decay=1e-5,               
-    logging_dir='./logs',            
-    eval_steps=100                   
+    warmup_steps=500,
+    weight_decay=1e-5,
+    logging_dir=tensor_logs,
+    eval_steps=100,
+    evaluation_strategy="epoch"
 )
 
 trainer = Trainer(
     model=model,                 
     args=training_args,                  
     train_dataset=train_dataset,         
-    eval_dataset=val_dataset,            
+    eval_dataset=val_dataset,    
+    compute_metrics=compute_metrics        
 )
 
 trainer.train()
 trainer.evaluate()
 
 # Saving & Loading the model<br>
-save_directory = "/saved_models" 
+save_directory = "saved_models/bert" 
+os.makedirs(save_directory, exist_ok=True)
 model.save_pretrained(save_directory)
 tokenizer.save_pretrained(save_directory)
+
+evaluation_results = trainer.evaluate()
+print("Evaluation Results:", evaluation_results)
