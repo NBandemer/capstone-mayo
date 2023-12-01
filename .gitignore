@@ -3,3 +3,4 @@
 /logs
 src/test.py
 saved_models
+src/__pycache__
