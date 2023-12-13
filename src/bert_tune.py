@@ -1,9 +1,6 @@
 from transformers import BertForSequenceClassification, BertTokenizer, TrainingArguments, Trainer
-
 import pandas as pd
-import numpy as np
 
-from sklearn.metrics import precision_recall_fscore_support
 from sklearn.model_selection import train_test_split
 
 import torch
@@ -13,16 +10,18 @@ from torch.utils.data import Dataset
 import sys
 import datetime
 import os
+import warnings
 
-num_labels_per_sdoh = [2, 2, 3, 3, 5, 5, 5]
+from helper import *
+
+# Suppress FutureWarning messages
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 tokenizer = BertTokenizer.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
-models = [BertForSequenceClassification.from_pretrained("emilyalsentzer/Bio_ClinicalBERT", num_labels=num_labels) for num_labels in num_labels_per_sdoh]
+model = BertForSequenceClassification.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-for model in models:
-    model.to(device)
+model.to(device)
 
 no_decay = ['bias', 'LayerNorm.weight']
 optimizer_grouped_parameters = [
@@ -34,14 +33,10 @@ optimizer = AdamW(optimizer_grouped_parameters, lr=1e-5)
 dataset = pd.read_csv("data\clean\PREPROCESSED-NOTES.csv")
 
 text_data = dataset["text"].to_list()
+sdoh_data = dataset["sdoh_community_present"].to_list()
 
-sdoh_columns = ["sdoh_community_present", "sdoh_community_absent", "sdoh_education", "sdoh_economics", "sdoh_environment","behavior_alcohol", "behavior_tobacco","behavior_drug"]
-sdoh_data = dataset[sdoh_columns].values.tolist()
-
-X_train, X_val, y_train, y_val = train_test_split(text_data, sdoh_data, random_state=0, train_size = .8)
-
-y_train = np.array(y_train)
-y_val = np.array(y_val)
+X_train, X_val, y_train, y_val = train_test_split(text_data, sdoh_data, random_state=0, train_size = .8, stratify=sdoh_data)
+# X_train, X_test, y_train, y_test = train_test_split(X_train, y_train, random_state=0, test_size = .01)
 
 max_seq_length = 100 #512
 
@@ -55,14 +50,18 @@ class DataLoader(Dataset):
         self.labels = labels
 
     def __getitem__(self, idx):
-        item = {key: torch.tensor(val[idx]) for key, val in self.encodings.items()}
-        # Convert labels to LongTensor
-        item['labels'] = torch.tensor(self.labels[idx], dtype=torch.long)
-        return item
+        try:
+            # Retrieve tokenized data for the given index
+            item = {key: torch.tensor(val[idx]) for key, val in self.encodings.items()}
+            # Add the label for the given index to the item dictionary
+            item['labels'] = torch.tensor(self.labels[idx])
+            return item
+        except Exception as e:
+            print(f"Error processing index {idx}: {e}")
+            return None
 
     def __len__(self):
         return len(self.labels)
-
 
 train_dataset = DataLoader(
     train_encodings,
@@ -82,55 +81,35 @@ os.makedirs(tensor_logs, exist_ok=True)
 epoch_logs = f'./logs/epoch_logs/logs_{timestamp}'
 os.makedirs(epoch_logs, exist_ok=True)
 
-def compute_metrics(eval_pred):
-    labels = eval_pred.label_ids
-    preds = eval_pred.predictions.argmax(-1)
-    precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='weighted')
-    return {
-        'f1': f1,
-        'precision': precision,
-        'recall': recall
-    }
-
-trainers = []
-evaluation_results = []
-
 training_args = TrainingArguments(
     output_dir=epoch_logs,
     logging_strategy='epoch',
     num_train_epochs=4,
-    per_device_train_batch_size=8, #16  
-    per_device_eval_batch_size=32, #64   
+    per_device_train_batch_size=16,  
+    per_device_eval_batch_size=64,   
     warmup_steps=500,
     weight_decay=1e-5,
     logging_dir=tensor_logs,
     eval_steps=100,
-    evaluation_strategy="epoch",
-    gradient_accumulation_steps=4
+    evaluation_strategy="epoch"
 )
 
-for i in range(len(models)): 
-    trainer = Trainer(
-        model=models[i],                 
-        args=training_args,                  
-        train_dataset=DataLoader(train_encodings, y_train[:, i]),         
-        eval_dataset=DataLoader(val_encodings, y_val[:, i]),    
-        compute_metrics=compute_metrics        
-    )
-    trainers.append(trainer)
+trainer = Trainer(
+    model=model,                 
+    args=training_args,                  
+    train_dataset=train_dataset,         
+    eval_dataset=val_dataset,    
+    compute_metrics=compute_metrics        
+)
 
-    # Train the model
-    trainer.train()
+trainer.train()
+trainer.evaluate()
 
-    # Evaluate the model
-    result = trainer.evaluate()
-    evaluation_results.append(result)
+# Saving & Loading the model<br>
+save_directory = "saved_models/bert" 
+os.makedirs(save_directory, exist_ok=True)
+model.save_pretrained(save_directory)
+tokenizer.save_pretrained(save_directory)
 
-    # Save the model
-    save_directory_i = f"saved_models/model_{i}" 
-    os.makedirs(save_directory_i, exist_ok=True)
-    models[i].save_pretrained(save_directory_i)
-    tokenizer.save_pretrained(save_directory_i)
-
-# evaluation_results = trainer.evaluate()
+evaluation_results = trainer.evaluate()
 print("Evaluation Results:", evaluation_results)
