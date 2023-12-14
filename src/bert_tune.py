@@ -83,14 +83,12 @@ os.makedirs(epoch_logs, exist_ok=True)
 
 training_args = TrainingArguments(
     output_dir=epoch_logs,
-    logging_strategy='epoch',
-    num_train_epochs=4,
-    per_device_train_batch_size=16,  
-    per_device_eval_batch_size=64,   
-    warmup_steps=500,
-    weight_decay=1e-5,
     logging_dir=tensor_logs,
-    eval_steps=100,
+    save_strategy='epoch',
+    num_train_epochs=4,
+    per_device_train_batch_size=64,  
+    per_device_eval_batch_size=64,
+    weight_decay=1e-5,
     evaluation_strategy="epoch"
 )
 
@@ -104,6 +102,13 @@ trainer = Trainer(
 
 trainer.train()
 trainer.evaluate()
+
+# convert to eval results to csv
+latest_checkpoint = get_latest_checkpoint(epoch_logs)
+json_path = os.path.join(latest_checkpoint, 'trainer_state.json')
+save_metrics_to_csv(json_path, 'eval_metric.csv')
+
+plot_metrics_from_csv('eval_metric.csv', 'graphs')
 
 # Saving & Loading the model<br>
 save_directory = "saved_models/bert" 
