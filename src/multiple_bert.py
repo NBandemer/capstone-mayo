@@ -1,8 +1,6 @@
 from transformers import BertForSequenceClassification, BertTokenizer, TrainingArguments, Trainer
 import pandas as pd
 
-from sklearn.model_selection import train_test_split
-
 import torch
 from torch.optim import AdamW
 from torch.utils.data import Dataset
