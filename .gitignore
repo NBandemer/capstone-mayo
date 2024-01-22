@@ -1,6 +1,7 @@
 .python-version
 /results
-/logs
-src/test.py
+logs
 saved_models
-src/__pycache__
+/.vscode
+__pycache__
+/data-old
