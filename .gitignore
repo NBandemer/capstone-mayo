@@ -1,7 +1,3 @@
 .python-version
 /results
-/logs
 src/test.py
-saved_models
-output
-t5result
