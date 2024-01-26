@@ -1,3 +1,6 @@
 .python-version
 /results
 src/test.py
+graphs
+logs
+saved_models
