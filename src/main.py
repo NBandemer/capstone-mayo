@@ -1,5 +1,6 @@
 from multiple_bert import *
 import argparse
+from pathlib import Path
 
 # sdoh_list = {
 #     "sdoh_community_present": 2,
@@ -11,6 +12,8 @@ import argparse
 #     "behavior_tobacco": 5,
 #     "behavior_drug": 5
 # }
+
+project_base_path = Path(__file__).parent.parent.resolve()
 
 parser = argparse.ArgumentParser(
     description="Extraction of social determinants of health.")
@@ -42,6 +45,6 @@ if invalid:
 
 # print(f"Model: {args.model}", f"SDOH: {args.sdoh}", f"Labels: {args.num_labels}", f"Epochs: {args.epochs}", f"Batch: {args.batch}",  sep="\n")
 # for sdoh, num_label in sdoh_list.items():
-model_trainer = TrainModel(args.sdoh, int(args.num_labels), args.model, int(args.epochs), int(args.batch))
+model_trainer = TrainModel(args.sdoh, int(args.num_labels), args.model, int(args.epochs), int(args.batch), project_base_path)
 
 model_trainer.generate_model()

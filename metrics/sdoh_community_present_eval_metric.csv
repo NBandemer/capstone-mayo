@@ -1,3 +1,0 @@
-epoch,learning_rate,loss,step,eval_accuracy,eval_f1,eval_loss,eval_precision,eval_recall,eval_runtime,eval_samples_per_second,eval_steps_per_second
-0.71,4.11095305832148e-05,0.2362,500,,,,,,,,
-1.0,,,703,0.9658362989323843,0.9657928137450648,0.1281854659318924,0.9657873226795459,0.9658362989323843,4.592,305.964,38.327
