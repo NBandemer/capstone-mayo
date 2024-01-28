@@ -126,25 +126,10 @@ class TrainModel():
         trainer.train()
         trainer.evaluate()
 
-        # File path to store metrics (csv)
-        # metrics_base_path = os.path.join(self.project_base_path, f'metrics')
-        # os.makedirs(metrics_base_path, exist_ok=True)
+        graph_path = os.path.join(self.project_base_path, f'graphs')
+        os.makedirs(graph_path, exist_ok=True)
 
-        # # convert to eval results to csv
-        # latest_checkpoint = get_latest_checkpoint(epoch_logs)
-
-        # json_path = os.path.join(latest_checkpoint, 'trainer_state.json')
-        # metric_save_path = f'{metrics_base_path}/{self.Sdoh_name}_eval_metric.csv'
-        # save_metrics_to_csv(json_path, f'{metrics_base_path}/{self.Sdoh_name}_eval_metric.csv')
-
-        # graph_path = os.path.join(self.project_base_path, f'graphs')
-        # os.makedirs(graph_path, exist_ok=True)
-
-        # plot_metrics_from_csv(metric_save_path, f'{graph_path}/{self.Sdoh_name}_metrics_plot.jpg')
-
-        # plt.show(block=False)
-        # plt.pause(10)
-        # plt.close()
+        plot_metric_from_tensor(tensor_logs, f'{graph_path}/{self.Sdoh_name}_metrics_plot.jpg')
 
         # Saving the model
         save_directory = os.path.join(self.project_base_path, f'saved_models/{self.Sdoh_name}')
