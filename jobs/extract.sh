@@ -1,11 +1,4 @@
 #!/bin/bash
-echo "Running script with defaults!" 
+echo "Running script with desired config!" 
 python ../src/main.py \
---model emilyalsentzer/Bio_ClinicalBERT \
---sdoh sdoh_community_present \
---num_labels 2 \
---data "../../data/clean/PREPROCESSED-NOTES-NEW.csv" \
---batch 8 \
---epochs 4 
-
-
+--config ./config.json

@@ -1,6 +1,7 @@
 from multiple_bert import *
 import argparse
 from pathlib import Path
+import json
 
 # sdoh_list = {
 #     "sdoh_community_present": 2,
@@ -17,34 +18,54 @@ project_base_path = Path(__file__).parent.parent.resolve()
 
 parser = argparse.ArgumentParser(
     description="Extraction of social determinants of health.")
-parser.add_argument("--model", action="store",
-                    help="Pre-trained model name from HuggingFace pipeline")
-parser.add_argument("--sdoh", action="store",
-                    help=f"Social determinant of health to extract.")
-parser.add_argument("--num_labels", action="store",
-                    help="Number of labels for training")
-parser.add_argument("--data", action="store",
-                    help="Path to dataset")
-parser.add_argument("--batch", action="store",
-                    help="Batch size for model")
-parser.add_argument("--epochs", action="store",
-                    help="Number of epochs for training")
+parser.add_argument("--config", action="store",
+                    help="Path to config file")
 
 args = parser.parse_args()
 args_dict = vars(args)
 
 invalid = False
 
-for key, value in args_dict.items():
-    if value is None:
-        invalid = True
-        print(f'Missing required argument ({key})!')
-
-if invalid:
+if args.config is None:
+    print('Missing required argument (config)!')
     exit(1)
 
-# print(f"Model: {args.model}", f"SDOH: {args.sdoh}", f"Labels: {args.num_labels}", f"Epochs: {args.epochs}", f"Batch: {args.batch}",  sep="\n")
-# for sdoh, num_label in sdoh_list.items():
+json_path = args.config
+
+if not Path(json_path).is_file():
+    print('Invalid path to config file!')
+    exit(1)
+
+with open(json_path) as json_file:
+    args_dict = json.load(json_file)
+
+    if 'sdoh' not in args_dict:
+        print('Missing required argument (sdoh)!')
+        invalid = True
+
+    if 'num_labels' not in args_dict:
+        print('Missing required argument (num_labels)!')
+        invalid = True
+
+    if 'model' not in args_dict:
+        print('Missing required argument (model)!')
+        invalid = True
+
+    if 'epochs' not in args_dict:
+        print('Missing required argument (epochs)!')
+        invalid = True
+
+    if 'batch' not in args_dict:
+        print('Missing required argument (batch)!')
+        invalid = True
+
+    if invalid:
+        exit(1)
+
+    args = argparse.Namespace(**args_dict)
+
+#print(args)
+
 model_trainer = TrainModel(args.sdoh, int(args.num_labels), args.model, int(args.epochs), int(args.batch), project_base_path)
 
 model_trainer.generate_model()
