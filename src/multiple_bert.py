@@ -1,4 +1,7 @@
-from transformers import BertForSequenceClassification, BertTokenizer, TrainingArguments, Trainer
+from transformers import BertForSequenceClassification, BertTokenizer
+from transformers import TrainingArguments, Trainer
+
+from transformers import EarlyStoppingCallback
 import pandas as pd
 
 import torch
@@ -89,10 +92,14 @@ class TrainModel():
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
         tensor_logs = os.path.join(self.project_base_path, f'logs/{self.Sdoh_name}/tensor_logs/logs_{timestamp}')
-        os.makedirs(tensor_logs, exist_ok=True)
+        # os.makedirs(tensor_logs, exist_ok=True)
 
         epoch_logs = os.path.join(self.project_base_path, f'logs/{self.Sdoh_name}/epoch_logs/logs_{timestamp}')
-        os.makedirs(epoch_logs, exist_ok=True)
+        # os.makedirs(epoch_logs, exist_ok=True)
+
+        early_stopping = EarlyStoppingCallback(
+                            early_stopping_patience=1
+                        )
 
         training_args = TrainingArguments(
             output_dir=epoch_logs,
@@ -102,39 +109,27 @@ class TrainModel():
             per_device_train_batch_size=self.batch,  
             per_device_eval_batch_size=self.batch,
             weight_decay=1e-5,
-            evaluation_strategy="epoch"
+            evaluation_strategy="epoch",
+            load_best_model_at_end=True,
+            metric_for_best_model='eval_loss'
         )
 
         trainer = Trainer(
-            model=self.model,                 
-            args=training_args,                  
-            train_dataset=train_dataset,         
-            eval_dataset=val_dataset,    
-            compute_metrics=compute_metrics        
+            model=self.model,
+            args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=val_dataset,
+            compute_metrics=compute_metrics,
+            callbacks=[early_stopping]
         )
 
-        # trainer.train()
-        # trainer.evaluate()
-
-        # File path to store metrics (csv)
-        metrics_base_path = os.path.join(self.project_base_path, f'metrics')
-        os.makedirs(metrics_base_path, exist_ok=True)
-
-        # convert to eval results to csv
-        latest_checkpoint = get_latest_checkpoint(epoch_logs)
-
-        json_path = os.path.join(latest_checkpoint, 'trainer_state.json')
-        metric_save_path = f'{metrics_base_path}/{self.Sdoh_name}_eval_metric.csv'
-        save_metrics_to_csv(json_path, f'{metrics_base_path}/{self.Sdoh_name}_eval_metric.csv')
+        trainer.train()
+        trainer.evaluate()
 
         graph_path = os.path.join(self.project_base_path, f'graphs')
         os.makedirs(graph_path, exist_ok=True)
 
-        plot_metrics_from_csv(metric_save_path, f'{graph_path}/{self.Sdoh_name}_metrics_plot.jpg')
-
-        # plt.show(block=False)
-        # plt.pause(10)
-        # plt.close()
+        plot_metric_from_tensor(tensor_logs, f'{graph_path}/{self.Sdoh_name}_metrics_plot.jpg')
 
         # Saving the model
         save_directory = os.path.join(self.project_base_path, f'saved_models/{self.Sdoh_name}')
