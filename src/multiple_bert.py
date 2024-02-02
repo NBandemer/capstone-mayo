@@ -5,7 +5,7 @@ from transformers import EarlyStoppingCallback
 import pandas as pd
 
 import torch
-from torch.optim import AdamW
+from transformers import AdamW, get_linear_schedule_with_warmup
 from torch.utils.data import Dataset
 
 import datetime
@@ -73,7 +73,7 @@ class TrainModel():
         y_train = pd.read_csv(base_path_for_test_train_split + 'y_train.csv').iloc[:, 0].tolist()
         y_val = pd.read_csv(base_path_for_test_train_split + 'y_val.csv').iloc[:, 0].tolist()
 
-        max_seq_length = 100 
+        max_seq_length = 128 
 
         # Truncate and tokenize your input data
         train_encodings = self.tokenizer(X_train, truncation=True, padding='max_length', max_length=max_seq_length, return_tensors='pt')
@@ -101,6 +101,8 @@ class TrainModel():
                             early_stopping_patience=1
                         )
 
+        optimizer = AdamW(self.model.parameters(), lr=1e-5)
+
         training_args = TrainingArguments(
             output_dir=epoch_logs,
             logging_dir=tensor_logs,
@@ -113,14 +115,15 @@ class TrainModel():
             load_best_model_at_end=True,
             metric_for_best_model='eval_loss'
         )
-
+        
         trainer = Trainer(
             model=self.model,
             args=training_args,
             train_dataset=train_dataset,
             eval_dataset=val_dataset,
             compute_metrics=compute_metrics,
-            callbacks=[early_stopping]
+            callbacks=[early_stopping],
+            optimizers=(optimizer, get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=len(train_dataset) * self.epochs))
         )
 
         trainer.train()
