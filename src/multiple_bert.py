@@ -101,7 +101,7 @@ class TrainModel():
                             early_stopping_patience=1
                         )
 
-        optimizer = AdamW(self.model.parameters(), lr=1e-5)
+        optimizer = AdamW(self.model.parameters(), lr=5e-5)
 
         training_args = TrainingArguments(
             output_dir=epoch_logs,
@@ -123,7 +123,7 @@ class TrainModel():
             eval_dataset=val_dataset,
             compute_metrics=compute_metrics,
             callbacks=[early_stopping],
-            optimizers=(optimizer, get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=len(train_dataset) * self.epochs))
+            optimizers=(optimizer, get_linear_schedule_with_warmup(optimizer, num_warmup_steps=(len(train_dataset) // self.batch) * 0.1, num_training_steps=(len(train_dataset) // self.batch) * self.epochs))
         )
 
         trainer.train()
