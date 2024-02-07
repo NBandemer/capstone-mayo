@@ -1,12 +1,13 @@
 from transformers import BertForSequenceClassification, BertTokenizer
 from transformers import TrainingArguments, Trainer
-
+from transformers import AdamW, get_linear_schedule_with_warmup
 from transformers import EarlyStoppingCallback
-import pandas as pd
 
 import torch
-from transformers import AdamW, get_linear_schedule_with_warmup
 from torch.utils.data import Dataset
+
+import pandas as pd
+from sklearn.model_selection import train_test_split
 
 import datetime
 import os
@@ -69,9 +70,19 @@ class TrainModel():
 
         # Reading the test_train_split data and converting it into lists for the tokenizer to use
         X_train = pd.read_csv(base_path_for_test_train_split + 'X_train.csv').iloc[:, 0].tolist()
-        X_val = pd.read_csv(base_path_for_test_train_split + 'X_val.csv').iloc[:, 0].tolist()
         y_train = pd.read_csv(base_path_for_test_train_split + 'y_train.csv').iloc[:, 0].tolist()
-        y_val = pd.read_csv(base_path_for_test_train_split + 'y_val.csv').iloc[:, 0].tolist()
+
+        # Create a DataFrame from the lists for 80-20 splitting
+        df = pd.DataFrame({'X': X_train, 'y': y_train})
+
+        # Set test_size to 0.2 for 20% validation split
+        X_train_new, X_val, y_train_new, y_val = train_test_split(df['X'], df['y'], test_size=0.2, random_state=42)
+
+        # Convert back to lists if needed
+        X_train_new = X_train_new.tolist()
+        y_train_new = y_train_new.tolist()
+        X_val = X_val.tolist()
+        y_val = y_val.tolist()
 
         max_seq_length = 128 
 
@@ -97,9 +108,7 @@ class TrainModel():
         epoch_logs = os.path.join(self.project_base_path, f'logs/{self.Sdoh_name}/epoch_logs/logs_{timestamp}')
         # os.makedirs(epoch_logs, exist_ok=True)
 
-        early_stopping = EarlyStoppingCallback(
-                            early_stopping_patience=1
-                        )
+        early_stopping = EarlyStoppingCallback(early_stopping_patience=3)
 
         optimizer = AdamW(self.model.parameters(), lr=5e-5)
 
@@ -143,3 +152,5 @@ class TrainModel():
 
         evaluation_results = trainer.evaluate()
         print("Evaluation Results:", evaluation_results)
+
+    
