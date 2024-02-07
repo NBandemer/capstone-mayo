@@ -10,8 +10,9 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 import datetime
-import os
 import warnings
+import shutil
+import os
 
 from helper import *
 
@@ -181,3 +182,16 @@ class TrainModel():
 
         evaluation_results = trainer.evaluate()
         print("Evaluation Results:", evaluation_results)
+
+         # Save evaluation results to a CSV file
+        eval_results_df = pd.DataFrame([evaluation_results])
+        eval_results_path = os.path.join(self.project_base_path, f'test_results/{self.Sdoh_name}')
+        os.makedirs(eval_results_path, exist_ok=True)
+
+        eval_results_df.to_csv(f"{eval_results_path}/results.csv", index=False)
+        print("Evaluation results saved to:", eval_results_path)
+
+        tmp_dir = os.path.join(self.project_base_path, 'tmp_trainer')
+        
+        if os.path.exists(tmp_dir):
+            shutil.rmtree(tmp_dir)
