@@ -153,4 +153,31 @@ class TrainModel():
         evaluation_results = trainer.evaluate()
         print("Evaluation Results:", evaluation_results)
 
-    
+    def test_model(self):
+        base_path_for_test_train_split = os.path.join(self.project_base_path, f"test_train_split/{self.Sdoh_name}/")
+
+        X_val = pd.read_csv(base_path_for_test_train_split + 'X_val.csv').iloc[:, 0].tolist()
+        y_val = pd.read_csv(base_path_for_test_train_split + 'y_val.csv').iloc[:, 0].tolist()
+        
+        max_seq_length = 128
+
+        val_encodings = self.tokenizer(X_val, truncation=True, padding='max_length', max_length=max_seq_length, return_tensors='pt')
+
+        val_dataset = DataLoader(
+            val_encodings,
+            y_val
+        )
+
+        save_directory = os.path.join(self.project_base_path, f'saved_models/{self.Sdoh_name}')
+        model_to_test =  BertForSequenceClassification.from_pretrained(save_directory)
+
+        trainer = Trainer(
+            model=model_to_test,
+            eval_dataset=val_dataset,
+            compute_metrics=compute_metrics
+        )
+
+        trainer.evaluate()
+
+        evaluation_results = trainer.evaluate()
+        print("Evaluation Results:", evaluation_results)
