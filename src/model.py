@@ -1,4 +1,4 @@
-from transformers import BertForSequenceClassification, BertTokenizer
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from transformers import TrainingArguments, Trainer
 from transformers import AdamW, get_linear_schedule_with_warmup
 from transformers import EarlyStoppingCallback
@@ -35,7 +35,7 @@ class DataLoader(Dataset):
     def __len__(self):
         return len(self.labels)
 
-class TrainModel():
+class Model():
     def __init__(self, Sdoh_name, num_of_labels, model_name, epochs, batch, project_base_path):
         """
         Initialize the tokenizer and model for the class to use
@@ -44,8 +44,8 @@ class TrainModel():
         warnings.simplefilter(action='ignore', category=FutureWarning)
 
         # Initialize tokenizer and model
-        self.tokenizer = BertTokenizer.from_pretrained(model_name)
-        self.model = BertForSequenceClassification.from_pretrained(model_name, num_labels=num_of_labels)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=num_of_labels)
 
         # Initialize device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -57,16 +57,7 @@ class TrainModel():
         self.batch = batch
         self.project_base_path = project_base_path
 
-    def generate_model(self):
-        # TODO: Clarify
-        # no_decay = ['bias', 'LayerNorm.weight']
-        # optimizer_grouped_parameters = [
-        #     {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-        #     {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-        # ]
-
-        # optimizer = AdamW(optimizer_grouped_parameters, lr=1e-5)
-
+    def train(self):
         base_path_for_test_train_split = os.path.join(self.project_base_path, f"test_train_split/{self.Sdoh_name}/")
 
         # Reading the test_train_split data and converting it into lists for the tokenizer to use
@@ -137,7 +128,6 @@ class TrainModel():
         )
 
         trainer.train()
-        trainer.evaluate()
 
         graph_path = os.path.join(self.project_base_path, f'graphs')
         os.makedirs(graph_path, exist_ok=True)
@@ -147,51 +137,46 @@ class TrainModel():
         # Saving the model
         save_directory = os.path.join(self.project_base_path, f'saved_models/{self.Sdoh_name}')
         os.makedirs(save_directory, exist_ok=True)
-
         self.model.save_pretrained(save_directory)
         self.tokenizer.save_pretrained(save_directory)
 
-        evaluation_results = trainer.evaluate()
-        print("Evaluation Results:", evaluation_results)
+    def test(self):
+        data_path = os.path.join(self.project_base_path, f"test_train_split/{self.Sdoh_name}/")
+        x_data = 'X_val.csv'
+        y_data = 'y_val.csv' 
 
-    def test_model(self):
-        base_path_for_test_train_split = os.path.join(self.project_base_path, f"test_train_split/{self.Sdoh_name}/")
-
-        X_val = pd.read_csv(base_path_for_test_train_split + 'X_val.csv').iloc[:, 0].tolist()
-        y_val = pd.read_csv(base_path_for_test_train_split + 'y_val.csv').iloc[:, 0].tolist()
+        #Load in the evaluation data sets
+        x_eval = pd.read_csv(os.path.join(data_path, x_data)).iloc[:, 0].tolist()
+        y_eval = pd.read_csv(os.path.join(data_path, y_data)).iloc[:, 0].tolist()
         
         max_seq_length = 128
+        x_encodings = self.tokenizer(x_eval, truncation=True, padding='max_length', max_length=max_seq_length, return_tensors='pt')
 
-        val_encodings = self.tokenizer(X_val, truncation=True, padding='max_length', max_length=max_seq_length, return_tensors='pt')
-
-        val_dataset = DataLoader(
-            val_encodings,
-            y_val
+        eval_dataset = DataLoader(
+            x_encodings,
+            y_eval
         )
 
-        save_directory = os.path.join(self.project_base_path, f'saved_models/{self.Sdoh_name}')
-        model_to_test =  BertForSequenceClassification.from_pretrained(save_directory)
+        saved_model = os.path.join(self.project_base_path, f'saved_models/{self.Sdoh_name}')
+        model =  AutoModelForSequenceClassification.from_pretrained(saved_model)
 
         trainer = Trainer(
-            model=model_to_test,
-            eval_dataset=val_dataset,
+            model=model,
+            eval_dataset=eval_dataset,
             compute_metrics=compute_metrics
         )
 
-        trainer.evaluate()
-
-        evaluation_results = trainer.evaluate()
-        print("Evaluation Results:", evaluation_results)
+        results = trainer.evaluate()
+        print("Evaluation Results:", results)
 
          # Save evaluation results to a CSV file
-        eval_results_df = pd.DataFrame([evaluation_results])
-        eval_results_path = os.path.join(self.project_base_path, f'test_results/{self.Sdoh_name}')
-        os.makedirs(eval_results_path, exist_ok=True)
+        results_df = pd.DataFrame([results])
+        results_path = os.path.join(self.project_base_path, f'test_results/{self.Sdoh_name}')
+        os.makedirs(results_path, exist_ok=True)
+        results_df.to_csv(f"{results_path}/results.csv", index=False)
+        print("Evaluation results saved to:", results_path)
 
-        eval_results_df.to_csv(f"{eval_results_path}/results.csv", index=False)
-        print("Evaluation results saved to:", eval_results_path)
-
-        tmp_dir = os.path.join(self.project_base_path, 'tmp_trainer')
-        
+        # Clean up temp files
+        tmp_dir = os.path.join(os.getcwd(), 'tmp_trainer')
         if os.path.exists(tmp_dir):
             shutil.rmtree(tmp_dir)

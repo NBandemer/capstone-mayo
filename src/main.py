@@ -1,4 +1,4 @@
-from multiple_bert import *
+from model import *
 import argparse
 from pathlib import Path
 import json
@@ -20,6 +20,7 @@ parser = argparse.ArgumentParser(
     description="Extraction of social determinants of health.")
 parser.add_argument("--config", action="store",
                     help="Path to config file")
+parser.add_argument("-e", "--eval", action="store_true", help="Flag to indicate test/evaluation mode")
 
 args = parser.parse_args()
 args_dict = vars(args)
@@ -32,40 +33,41 @@ if args.config is None:
 
 json_path = args.config
 
-if not Path(json_path).is_file():
+if not os.path.isfile(json_path):
     print('Invalid path to config file!')
     exit(1)
 
 with open(json_path) as json_file:
-    args_dict = json.load(json_file)
+    config = json.load(json_file)
 
-    if 'sdoh' not in args_dict:
+    if 'sdoh' not in config:
         print('Missing required argument (sdoh)!')
         invalid = True
 
-    if 'num_labels' not in args_dict:
+    if 'num_labels' not in config:
         print('Missing required argument (num_labels)!')
         invalid = True
 
-    if 'model' not in args_dict:
+    if 'model' not in config:
         print('Missing required argument (model)!')
         invalid = True
 
-    if 'epochs' not in args_dict:
+    if 'epochs' not in config:
         print('Missing required argument (epochs)!')
         invalid = True
 
-    if 'batch' not in args_dict:
+    if 'batch' not in config:
         print('Missing required argument (batch)!')
         invalid = True
 
     if invalid:
         exit(1)
 
-    args = argparse.Namespace(**args_dict)
+    config = argparse.Namespace(**config)
 
-#print(args)
+model = Model(config.sdoh, int(config.num_labels), config.model, int(config.epochs), int(config.batch), project_base_path)
 
-model_trainer = TrainModel(args.sdoh, int(args.num_labels), args.model, int(args.epochs), int(args.batch), project_base_path)
-
-model_trainer.generate_model()
+if args.eval: #evaluation mode
+    model.test()
+else:
+    model.train()
