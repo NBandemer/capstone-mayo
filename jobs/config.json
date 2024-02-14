@@ -1,8 +1,8 @@
 {
     "model": "emilyalsentzer/Bio_ClinicalBERT",
-    "sdoh": "sdoh_community_present",
+    "sdoh": "sdoh_education",
     "num_labels": 2,
-    "data": "../../data/clean/PREPROCESSED-NOTES-NEW.csv",
+    "data": "../data/PREPROCESSED-NOTES-NEW.csv",
     "batch": 8,
-    "epochs": 4
+    "epochs": 20
 }

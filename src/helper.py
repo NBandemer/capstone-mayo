@@ -1,5 +1,8 @@
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.metrics import ConfusionMatrixDisplay, RocCurveDisplay
+from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
+from sklearn.utils import resample
 
 from tensorboard.backend.event_processing import event_accumulator
 import matplotlib.pyplot as plt
@@ -7,11 +10,59 @@ import matplotlib.pyplot as plt
 import os
 import pandas as pd
 
-def test_train_split():
+current_sbdh = "sdoh_education"
+
+sbdh_substance = {
+    0: 'None',
+    1: 'Present',
+    2: 'Past',
+    3: 'Never',
+    4: 'Unsure'
+}
+
+#Economics (employed) classifications
+sbdh_econ_env = {
+    0: 'None',
+    1: 'True',
+    2: 'False',
+}
+
+#Community or Education classifications
+sbdh_community_ed = {
+    0: 'False',
+    1: 'True',
+}
+
+def set_sdoh(sdoh_name):
+    """
+    This function sets the SDOH described in the classification report
+    """
+    global current_sbdh
+    current_sbdh = sdoh_name
+
+def balance_data(df):
+    values = df['y'].value_counts()
+    majority = df[df['y'] == values.idxmax()]
+    desired_samples = len(majority)
+
+    for label in values.index:
+        if label == values.idxmax():
+            continue
+        minority = df[df['y'] == label]
+        upsampled_minority = resample(minority,
+                                      replace=True,  # Sample with replacement
+                                      n_samples=desired_samples,  # Match number of majority class
+                                      random_state=42)
+        majority = pd.concat([majority, upsampled_minority])
+
+    return majority
+
+
+def test_train_split(base_path, data):
     """
     This function creates the test_train_split for all the SDoH from the pre processed data
     """
-    dataset = pd.read_csv("data\PREPROCESSED-NOTES.csv")
+    dataset = pd.read_csv(data)
 
     text_data = dataset["text"].to_list()
 
@@ -26,25 +77,21 @@ def test_train_split():
         "behavior_drug": dataset["behavior_drug"].to_list()
     }
 
-    base_path = 'test_train_split/behavior_drug'
-    os.makedirs(base_path, exist_ok=True)
-
     # Iterate through each SDOH data category
     for category, data in sdoh_data.items():
         # Create folder for each category
-        base_path = f"test_train_split/{category}"
-        os.makedirs(base_path, exist_ok=True)
+        category_data_path = f"{base_path}/data/test_train_split/{category}"
+        os.makedirs(category_data_path, exist_ok=True)
 
         # Split data for the current category
         X_train, X_val, y_train, y_val = train_test_split(
             text_data, data, random_state=0, train_size=0.8, stratify=data
         )
 
-            # Save all splits as CSV files
-        pd.DataFrame({"text": X_train}).to_csv(f"{base_path}/X_train.csv", index=False)
-        pd.DataFrame({"text": X_val}).to_csv(f"{base_path}/X_val.csv", index=False)
-        pd.DataFrame({category: y_train}).to_csv(f"{base_path}/y_train.csv", index=False)
-        pd.DataFrame({category: y_val}).to_csv(f"{base_path}/y_val.csv", index=False)
+        # Save train and test data to seprate csvs
+        pd.DataFrame({"text": X_train, category: y_train}).to_csv(f"{category_data_path}/train.csv", index=False)
+        pd.DataFrame({"text": X_val, category: y_val}).to_csv(f"{category_data_path}/test.csv", index=False)
+
 
 def compute_metrics(eval_pred):
     """
@@ -56,12 +103,36 @@ def compute_metrics(eval_pred):
     recall = recall_score(labels, preds, average='weighted')
     f1 = f1_score(labels, preds, average='weighted')
     acc = accuracy_score(labels, preds)
+    report = classification_report(labels, preds, output_dict=True)
+    auc = roc_auc_score(labels, preds, average='weighted', multi_class='ovr')
+
+    # Confusion Matrix
+    cm = ConfusionMatrixDisplay.from_predictions(labels, preds)
+    cm.plot()
+    plt.show()
+    
+    if current_sbdh.startswith("behavior"):
+        current_sbdh_dict = sbdh_substance
+    elif current_sbdh == "sdoh_economics" or current_sbdh == "sdoh_environment":
+        current_sbdh_dict = sbdh_econ_env
+    else:
+        current_sbdh_dict = sbdh_community_ed
+    
+    for key, value in current_sbdh_dict.items():
+        report[value] = report[str(key)]
+        del report[str(key)]
+    
+    print(f'Classification Report for {current_sbdh}', report, sep='\n')
+
     return {
         'accuracy': acc,
         'f1': f1,
         'precision': precision,
-        'recall': recall
+        'recall': recall,
+        'auc': auc
     }
+
+
 
 def plot_metric_from_tensor(log_dir, save_dir):
     '''

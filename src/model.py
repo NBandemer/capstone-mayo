@@ -58,38 +58,40 @@ class Model():
         self.project_base_path = project_base_path
 
     def train(self):
-        base_path_for_test_train_split = os.path.join(self.project_base_path, f"test_train_split/{self.Sdoh_name}/")
+        data_path = os.path.join(self.project_base_path, f"data/test_train_split/{self.Sdoh_name}/")
+        data_file = 'train.csv'
+        df = pd.read_csv(os.path.join(data_path, data_file))
 
-        # Reading the test_train_split data and converting it into lists for the tokenizer to use
-        X_train = pd.read_csv(base_path_for_test_train_split + 'X_train.csv').iloc[:, 0].tolist()
-        y_train = pd.read_csv(base_path_for_test_train_split + 'y_train.csv').iloc[:, 0].tolist()
+        x = df['text']
+        y = df[self.Sdoh_name]
 
-        # Create a DataFrame from the lists for 80-20 splitting
-        df = pd.DataFrame({'X': X_train, 'y': y_train})
-
-        # Set test_size to 0.2 for 20% validation split
-        X_train_new, X_val, y_train_new, y_val = train_test_split(df['X'], df['y'], test_size=0.2, random_state=42)
+        # Select 20% of training data for validation
+        X_train, X_val, y_train, y_val = train_test_split(x, y, test_size=0.2, random_state=42, stratify=y)
+        
+        # Handle class imbalance in training data
+        df_train = pd.DataFrame({'X': X_train, 'y': y_train})
+        balanced_train = balance_data(df_train)
 
         # Convert back to lists if needed
-        X_train_new = X_train_new.tolist()
-        y_train_new = y_train_new.tolist()
-        X_val = X_val.tolist()
-        y_val = y_val.tolist()
+        list_train_x = balanced_train['X'].tolist()
+        list_train_y = balanced_train['y'].tolist()
+        list_val_x = X_val.tolist()
+        list_val_y = y_val.tolist()
 
         max_seq_length = 128 
 
         # Truncate and tokenize your input data
-        train_encodings = self.tokenizer(X_train, truncation=True, padding='max_length', max_length=max_seq_length, return_tensors='pt')
-        val_encodings = self.tokenizer(X_val, truncation=True, padding='max_length', max_length=max_seq_length, return_tensors='pt')
-
+        train_encodings = self.tokenizer(list_train_x, truncation=True, padding='max_length', max_length=max_seq_length, return_tensors='pt')
+        val_encodings = self.tokenizer(list_val_x, truncation=True, padding='max_length', max_length=max_seq_length, return_tensors='pt')
+        
         train_dataset = DataLoader(
             train_encodings,
-            y_train
+            list_train_y
         )
 
         val_dataset = DataLoader(
             val_encodings,
-            y_val
+            list_val_y
         )
 
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -100,7 +102,7 @@ class Model():
         epoch_logs = os.path.join(self.project_base_path, f'logs/{self.Sdoh_name}/epoch_logs/logs_{timestamp}')
         # os.makedirs(epoch_logs, exist_ok=True)
 
-        early_stopping = EarlyStoppingCallback(early_stopping_patience=3)
+        early_stopping = EarlyStoppingCallback(early_stopping_patience=5)
 
         optimizer = AdamW(self.model.parameters(), lr=5e-5)
 
@@ -127,7 +129,12 @@ class Model():
             optimizers=(optimizer, get_linear_schedule_with_warmup(optimizer, num_warmup_steps=(len(train_dataset) // self.batch) * 0.1, num_training_steps=(len(train_dataset) // self.batch) * self.epochs))
         )
 
+        # Apply weighted loss function to trainer
+        # weight = torch.tensor([0.9,0.1])
+        # trainer.compute_loss = torch.nn.CrossEntropyLoss(weight=weight)
+
         trainer.train()
+        print("Training complete")
 
         graph_path = os.path.join(self.project_base_path, f'graphs')
         os.makedirs(graph_path, exist_ok=True)
@@ -166,6 +173,7 @@ class Model():
             compute_metrics=compute_metrics
         )
 
+        set_sdoh(self.Sdoh_name)
         results = trainer.evaluate()
         print("Evaluation Results:", results)
 

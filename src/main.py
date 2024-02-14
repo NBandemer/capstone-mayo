@@ -21,6 +21,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument("--config", action="store",
                     help="Path to config file")
 parser.add_argument("-e", "--eval", action="store_true", help="Flag to indicate test/evaluation mode")
+parser.add_argument("-s", "--split", action="store_true", help="Flag to indicate data split mode, necessary for new data")
 
 args = parser.parse_args()
 args_dict = vars(args)
@@ -65,6 +66,15 @@ with open(json_path) as json_file:
 
     config = argparse.Namespace(**config)
 
+# Data Split Mode for new data
+if args.split:
+    if os.path.isfile(config.data):
+        test_train_split(project_base_path, config.data)
+    else:
+        print('Invalid data file path: ', config.data)
+    exit(1)
+
+# If not data split mode, then train or test mode, so initiate model
 model = Model(config.sdoh, int(config.num_labels), config.model, int(config.epochs), int(config.batch), project_base_path)
 
 if args.eval: #evaluation mode
