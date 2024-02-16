@@ -1,7 +1,10 @@
 .python-version
 /results
+src/test.py
+graphs
 logs
 saved_models
 /.vscode
 __pycache__
-/data-old
+data/data-old
+test_results
