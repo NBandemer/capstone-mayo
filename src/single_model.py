@@ -5,6 +5,8 @@ import json
 from sklearn.model_selection import train_test_split
 import torch
 
+from transformers import EarlyStoppingCallback
+
 from datasets import Dataset, load_metric
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, DataCollatorWithPadding, Trainer, TrainerCallback, TrainingArguments
 from torch.utils.data import DataLoader
@@ -160,29 +162,19 @@ def compute_metrics(eval_pred):
     # Deduce predictions from logits
     predictions = get_preds_from_logits(logits)
     
-    # Get f1 metrics for global scoring. Notice that f1_micro = accuracy
-    final_metrics["f1_micro_for_global_score"] = f1_score(labels[:, GLOBAL_SCORE_INDICES], predictions[:, GLOBAL_SCORE_INDICES], average="micro")
-    final_metrics["f1_macro_for_global_score"] = f1_score(labels[:, GLOBAL_SCORE_INDICES], predictions[:, GLOBAL_SCORE_INDICES], average="macro")
-    
-    # Get f1 metrics for causes
-    final_metrics["f1_micro_for_causes"] = f1_score(labels[:, CAUSE_INDICES], predictions[:, CAUSE_INDICES], average="micro")
-    final_metrics["f1_macro_for_causes"] = f1_score(labels[:, CAUSE_INDICES], predictions[:, CAUSE_INDICES], average="macro")
-    
-    # Get f1 metrics for emotions
-    final_metrics["f1_micro_for_emotions"] = f1_score(labels[:, EMOTION_INDICES], predictions[:, EMOTION_INDICES], average="micro")
-    final_metrics["f1_macro_for_emotions"] = f1_score(labels[:, EMOTION_INDICES], predictions[:, EMOTION_INDICES], average="macro")
+    for sdoh in sdohs:
+        index = globals()[sdoh.upper() + "_INDICES"]
+
+        final_metrics[f'f1_micro_{sdoh}'] = f1_score(labels[:, index], predictions[:, index], average="micro")
+        final_metrics[f'f1_macro_{sdoh}'] = f1_score(labels[:, index], predictions[:, index], average="macro")
+
+        print(f"Classification report for {sdoh}: ")
+        print(classification_report(labels[:, index], predictions[:, index], zero_division=0))
 
     # The global f1_metrics
     final_metrics["f1_micro"] = f1_score(labels, predictions, average="micro")
     final_metrics["f1_macro"] = f1_score(labels, predictions, average="macro")
     
-    # Classification report
-    print("Classification report for global scores: ")
-    print(classification_report(labels[:, GLOBAL_SCORE_INDICES], predictions[:, GLOBAL_SCORE_INDICES], zero_division=0))
-    print("Classification report for causes: ")
-    print(classification_report(labels[:, CAUSE_INDICES], predictions[:, CAUSE_INDICES], zero_division=0))
-    print("Classification report for emotions: ")
-    print(classification_report(labels[:, EMOTION_INDICES], predictions[:, EMOTION_INDICES], zero_division=0))
     return final_metrics
 
 """
@@ -202,16 +194,28 @@ class MultiTaskClassificationTrainer(Trainer):
         outputs = model(**inputs)
         logits = outputs[0]
         
-        global_score_loss = torch.nn.functional.cross_entropy(logits[:, GLOBAL_SCORE_INDICES], labels[:, GLOBAL_SCORE_INDICES])
-        emotion_loss = torch.nn.functional.binary_cross_entropy_with_logits(logits[:, EMOTION_INDICES], labels[:, EMOTION_INDICES])
-        cause_loss = torch.nn.functional.binary_cross_entropy_with_logits(logits[:, CAUSE_INDICES], labels[:, CAUSE_INDICES])
+        sdoh_community_present_loss = torch.nn.functional.cross_entropy(logits[:, SDOH_COMMUNITY_PRESENT_LABELS], labels[:, SDOH_COMMUNITY_PRESENT_LABELS])
+        sdoh_community_absent_loss = torch.nn.functional.binary_cross_entropy_with_logits(logits[:, SDOH_COMMUNITY_ABSENT_LABELS], labels[:, SDOH_COMMUNITY_ABSENT_LABELS])
+        sdoh_education_loss = torch.nn.functional.binary_cross_entropy_with_logits(logits[:, SDOH_EDUCATION_LABELS], labels[:, SDOH_EDUCATION_LABELS])
+        sdoh_economics_loss = torch.nn.functional.cross_entropy(logits[:, SDOH_ECONOMICS_LABELS], labels[:, SDOH_ECONOMICS_LABELS])
+        sdoh_environment_loss = torch.nn.functional.binary_cross_entropy_with_logits(logits[:, SDOH_ENVIRONMENT_LABELS], labels[:, SDOH_ENVIRONMENT_LABELS])
+        behavior_alcohol_loss = torch.nn.functional.cross_entropy(logits[:, BEHAVIOR_ALCOHOL_LABELS], labels[:, BEHAVIOR_ALCOHOL_LABELS])
+        behavior_tobacco_loss = torch.nn.functional.binary_cross_entropy_with_logits(logits[:, BEHAVIOR_TOBACCO_LABELS], labels[:, BEHAVIOR_TOBACCO_LABELS])
+        behavior_drug_loss = torch.nn.functional.binary_cross_entropy_with_logits(logits[:, BEHAVIOR_DRUG_LABELS], labels[:, BEHAVIOR_DRUG_LABELS])
         
-        loss = self.group_weights[0] * global_score_loss + self.group_weights[2] * emotion_loss + self.group_weights[1] * cause_loss
+        loss = 0
+
+        for i in range(len(sdohs)):
+            sdoh_loss = globals()[sdohs[i].lower() + "_loss"]
+            loss += self.group_weights[i] * sdoh_loss
+
         return (loss, outputs) if return_outputs else loss
     
 """
 Set training parameters
 """
+
+early_stopping = EarlyStoppingCallback(early_stopping_patience=5)
 
 class PrinterCallback(TrainerCallback):
     def on_epoch_end(self, args, state, control, logs=None, **kwargs):
@@ -237,7 +241,7 @@ training_args = TrainingArguments(
 #     train_dataset=ds["train"],
 #     eval_dataset=ds["validation"],
 #     compute_metrics=compute_metrics,
-#     callbacks=[PrinterCallback],
+#     callbacks=[PrinterCallback, early_stopping],
 #     group_weights=(0.7, 4, 4)
 # )
 
