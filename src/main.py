@@ -75,7 +75,14 @@ if args.split:
     exit(1)
 
 # If not data split mode, then train or test mode, so initiate model
-model = Model(config.sdoh, int(config.num_labels), config.model, int(config.epochs), int(config.batch), project_base_path)
+model = Model(
+    Sdoh_name=config.sdoh, 
+    num_of_labels=int(config.num_labels), 
+    model_name=config.model, 
+    epochs=int(config.epochs), 
+    batch=int(config.batch), 
+    project_base_path=project_base_path,
+    weighted=bool(config.weighted))
 
 if args.eval: #evaluation mode
     model.test()

@@ -38,22 +38,14 @@ class DataLoader(Dataset):
         return len(self.labels)
 
 class CustomTrainer(Trainer):
-    def __init__(self, *args, **kwargs):
-        self.test = kwargs.pop('test', None)
-        self.weighted = kwargs.pop('weighted', None)
-        super().__init__(*args, **kwargs)
-
     def compute_loss(self, model, inputs, return_outputs=False):
         """
         Overriding the compute_loss function to apply weighted loss function
         """
         labels = inputs.pop("labels")
-        model.to(torch.device("cuda"))
         outputs = model(**inputs)
         logits = outputs.logits
-
-        weights = self.weights if self.weighted else None
-        loss_fct = torch.nn.CrossEntropyLoss(weight=weights).cuda()
+        loss_fct = torch.nn.CrossEntropyLoss(weight=self.weights)
         loss = loss_fct(logits, labels)
         return (loss, outputs) if return_outputs else loss
     
@@ -64,17 +56,14 @@ class CustomTrainer(Trainer):
         # Calculate the class weights
         class_weights = compute_class_weight('balanced', classes=np.unique(y_train), y=y_train)
         # Create a dictionary to hold the class weights
-        weight_dict = {i: float(class_weights[i]) for i in range(len(class_weights))}
+        weight_dict = {i: class_weights[i] for i in range(len(class_weights))}
         # Convert the dictionary to a tensor
         weights = torch.tensor([weight_dict[key] for key in range(len(weight_dict))])
         print("Class Weights:", weights)
         self.weights = weights
 
-    def compute_metrics(self, eval_pred):
-        return compute_metrics(eval_pred, self.test)
-
 class Model():
-    def __init__(self, Sdoh_name, num_of_labels, model_name, epochs, batch, weighted, project_base_path):
+    def __init__(self, Sdoh_name, num_of_labels, model_name, epochs, batch, project_base_path):
         """
         Initialize the tokenizer and model for the class to use
         """
@@ -93,10 +82,9 @@ class Model():
         self.num_of_labels = num_of_labels
         self.epochs = epochs
         self.batch = batch
-        self.weighted = weighted
         self.project_base_path = project_base_path
 
-    def train_split(self):
+    def load_data(self):
         data_path = os.path.join(self.project_base_path, f"data/test_train_split/{self.Sdoh_name}/")
         data_file = 'train.csv'
         df = pd.read_csv(os.path.join(data_path, data_file))
@@ -107,94 +95,38 @@ class Model():
         # Select 20% of training data for validation
         return train_test_split(x, y, test_size=0.2, random_state=42, stratify=y)
 
-    # def modeltraining(df):
-    #     df = data_split(df)
-    #     dataset_train, dataset_val = tokenizationBERT(df)
-    #     model = BertForSequenceClassification.from_pretrained("bert-base-uncased",
-    #                                                     num_labels=3,
-    #                                                     output_attentions=False,
-    #                                                     output_hidden_states=False)
-    #     batch_size = 5
-    #     dataloader_train = DataLoader(dataset_train, 
-    #                             sampler=RandomSampler(dataset_train), 
-    #                             batch_size=batch_size)
-    #     dataloader_validation = DataLoader(dataset_val, 
-    #                                 sampler=SequentialSampler(dataset_val), 
-    #                                 batch_size=batch_size)
-    #     optimizer = AdamW(model.parameters(),
-    #                 lr=1e-5, 
-    #                 eps=1e-8)
-        
-    #     epochs = 5
-
-    #     scheduler = get_linear_schedule_with_warmup(optimizer, 
-    #                                             num_warmup_steps=0,
-    #                                             num_training_steps=len(dataloader_train)*epochs)
-    #     seed_val = 17
-    #     random.seed(seed_val)
-    #     np.random.seed(seed_val)
-    #     torch.manual_seed(seed_val)
-    #     torch.cuda.manual_seed_all(seed_val)
-    #     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    #     model.to(device)
-    #     print(device)
-    #     for epoch in tqdm(range(1, epochs+1)):
-    #         model.train()
-        
-    #         loss_train_total = 0
-
-    #         progress_bar = tqdm(dataloader_train, desc='Epoch {:1d}'.format(epoch), leave=False, disable=False)
-    #         for batch in progress_bar:
-
-    #             model.zero_grad()
-            
-    #             batch = tuple(b.to(device) for b in batch)
-            
-    #             inputs = {'input_ids':      batch[0],
-    #                 'attention_mask': batch[1],
-    #                 'labels':         batch[2],
-    #                 }       
-
-    #             outputs = model(**inputs)
-            
-    #             loss = outputs[0]
-    #             loss_train_total += loss.item()
-    #             loss.backward()
-
-    #             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-
-    #             optimizer.step()
-    #             scheduler.step()
-            
-    #             progress_bar.set_postfix({'training_loss': '{:.3f}'.format(loss.item()/len(batch))})
-            
-            
-    #         torch.save(model.state_dict(), f'finetuned_BERT_epoch_{epoch}.model')
-            
-    #         tqdm.write(f'\nEpoch {epoch}')
-        
-    #         loss_train_avg = loss_train_total/len(dataloader_train)            
-    #         tqdm.write(f'Training loss: {loss_train_avg}')
-        
-    #         val_loss, predictions, true_vals = evaluate(model, dataloader_validation, device)
-    #         val_f1 = f1_score_func(predictions, true_vals)
-    #         tqdm.write(f'Validation loss: {val_loss}')
-    #         tqdm.write(f'F1 Score (Weighted): {val_f1}')
-        
-    #     _, predictions, true_vals = evaluate(model, dataloader_validation, device)
+    def balance_data(self, X_train, y_train):
+        # Handle class imbalance in training data
+        df_train = pd.DataFrame({'X': X_train, 'y': y_train})
+        balanced_train = balance_data(df_train)
+        # Convert back to lists if needed
+        list_train_x = balanced_train['X'].tolist()
+        list_train_y = balanced_train['y'].tolist()
+        return list_train_x,list_train_y
 
     def train(self):
-        X_train, X_val, y_train, y_val = self.train_split()
+        # X_train, X_val, y_train, y_val = self.load_data()
+        # # X_train, y_train = self.balance_data(X_train, y_train)
+        data_path = os.path.join(self.project_base_path, f"data/test_train_split/{self.Sdoh_name}/")
+        data_file = 'train.csv'
+        df = pd.read_csv(os.path.join(data_path, data_file))
+
+        x = df['text']
+        y = df[self.Sdoh_name]
+
+        # Select 20% of training data for validation
+        X_train, X_val, y_train, y_val = train_test_split(x, y, test_size=0.2, random_state=42, stratify=y)
         
-        # if self.balance == "oversample":
-        # # Handle class imbalance in training data with oversampling (copy minority class data)
-        #     df_train = pd.DataFrame({'X': X_train, 'y': y_train})
-        #     balanced_train = balance_data(df_train)
+        # Handle class imbalance in training data
+        df_train = pd.DataFrame({'X': X_train, 'y': y_train})
+        balanced_train = balance_data(df_train)
 
-        #     # Convert back to lists if needed
-        #     X_train = balanced_train['X']
-        #     y_train = balanced_train['y']
-
+        # Convert back to lists if needed
+        # list_train_x = balanced_train['X'].tolist()
+        # list_train_y = balanced_train['y'].tolist()
+        # list_val_x = X_val.tolist()
+        # list_val_y = y_val.tolist()
+    
         max_seq_length = 128 
 
         # Truncate and tokenize your input data
@@ -203,12 +135,12 @@ class Model():
         
         train_dataset = DataLoader(
             train_encodings,
-            y_train.tolist()
+            y_train
         )
 
         val_dataset = DataLoader(
             val_encodings,
-            y_val.tolist()
+            y_val
         )
 
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -236,20 +168,17 @@ class Model():
             metric_for_best_model='eval_loss'
         )
         
-        trainer = CustomTrainer(
+        trainer = Trainer(
             model=self.model,
             args=training_args,
             train_dataset=train_dataset,
             eval_dataset=val_dataset,
+            compute_metrics=compute_metrics,
             callbacks=[early_stopping],
-            optimizers=(optimizer, get_linear_schedule_with_warmup(optimizer, num_warmup_steps=(len(train_dataset) // self.batch) * 0.1, num_training_steps=(len(train_dataset) // self.batch) * self.epochs)),
-            test=False,
-            weighted=self.weighted
+            optimizers=(optimizer, get_linear_schedule_with_warmup(optimizer, num_warmup_steps=(len(train_dataset) // self.batch) * 0.1, num_training_steps=(len(train_dataset) // self.batch) * self.epochs))
         )
 
-        if self.weighted:
-            trainer.get_class_weights(y_train.tolist())
-
+        # trainer.get_class_weights(y_train)
         trainer.train()
         print("Training complete")
 
@@ -265,17 +194,13 @@ class Model():
         self.tokenizer.save_pretrained(save_directory)
 
     def test(self):
-        data_path = os.path.join(self.project_base_path, f"data/test_train_split/{self.Sdoh_name}/")
-        data= 'test.csv'
-        df = pd.read_csv(os.path.join(data_path, data))
-        x_eval = df['text'].tolist()
-        y_eval = df[self.Sdoh_name].tolist()
-        # x_data = 'X_val.csv'
-        # y_data = 'y_val.csv' 
+        data_path = os.path.join(self.project_base_path, f"test_train_split/{self.Sdoh_name}/")
+        x_data = 'X_val.csv'
+        y_data = 'y_val.csv' 
 
         #Load in the evaluation data sets
-        # x_eval = pd.read_csv(os.path.join(data_path, x_data)).iloc[:, 0].tolist()
-        # y_eval = pd.read_csv(os.path.join(data_path, y_data)).iloc[:, 0].tolist()
+        x_eval = pd.read_csv(os.path.join(data_path, x_data)).iloc[:, 0].tolist()
+        y_eval = pd.read_csv(os.path.join(data_path, y_data)).iloc[:, 0].tolist()
         
         max_seq_length = 128
         x_encodings = self.tokenizer(x_eval, truncation=True, padding='max_length', max_length=max_seq_length, return_tensors='pt')
@@ -288,22 +213,19 @@ class Model():
         saved_model = os.path.join(self.project_base_path, f'saved_models/{self.Sdoh_name}')
         model =  AutoModelForSequenceClassification.from_pretrained(saved_model)
 
-        trainer = CustomTrainer(
+        trainer = Trainer(
             model=model,
             eval_dataset=eval_dataset,
-            compute_metrics=compute_metrics,
-            test=True
+            compute_metrics=compute_metrics
         )
 
         set_sdoh(self.Sdoh_name)
-
-        model.eval()
         results = trainer.evaluate()
         print("Evaluation Results:", results)
 
          # Save evaluation results to a CSV file
         results_df = pd.DataFrame([results])
-        results_path = os.path.join(self.project_base_path, f'test_results/{self.Sdoh_name}_before')
+        results_path = os.path.join(self.project_base_path, f'test_results/{self.Sdoh_name}')
         os.makedirs(results_path, exist_ok=True)
         results_df.to_csv(f"{results_path}/results.csv", index=False)
         print("Evaluation results saved to:", results_path)

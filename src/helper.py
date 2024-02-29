@@ -1,4 +1,4 @@
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, roc_curve
 from sklearn.metrics import ConfusionMatrixDisplay, RocCurveDisplay
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
@@ -93,7 +93,7 @@ def test_train_split(base_path, data):
         pd.DataFrame({"text": X_val, category: y_val}).to_csv(f"{category_data_path}/test.csv", index=False)
 
 
-def compute_metrics(eval_pred):
+def compute_metrics(eval_pred, test):
     """
     Calculates the metrics at the end of each epoch
     """
@@ -105,24 +105,26 @@ def compute_metrics(eval_pred):
     acc = accuracy_score(labels, preds)
     report = classification_report(labels, preds, output_dict=True)
     auc = roc_auc_score(labels, preds, average='weighted', multi_class='ovr')
-
+ 
+    
     # Confusion Matrix
-    cm = ConfusionMatrixDisplay.from_predictions(labels, preds)
-    cm.plot()
-    plt.show()
+    if test:
+        roc_curve(labels, preds)
+        cm = ConfusionMatrixDisplay.from_predictions(labels, preds)
+        cm.plot()
+        plt.show()
+        if current_sbdh.startswith("behavior"):
+            current_sbdh_dict = sbdh_substance
+        elif current_sbdh == "sdoh_economics" or current_sbdh == "sdoh_environment":
+            current_sbdh_dict = sbdh_econ_env
+        else:
+            current_sbdh_dict = sbdh_community_ed
     
-    if current_sbdh.startswith("behavior"):
-        current_sbdh_dict = sbdh_substance
-    elif current_sbdh == "sdoh_economics" or current_sbdh == "sdoh_environment":
-        current_sbdh_dict = sbdh_econ_env
-    else:
-        current_sbdh_dict = sbdh_community_ed
+        for key, value in current_sbdh_dict.items():
+            report[value] = report[str(key)]
+            del report[str(key)]
     
-    for key, value in current_sbdh_dict.items():
-        report[value] = report[str(key)]
-        del report[str(key)]
-    
-    print(f'Classification Report for {current_sbdh}', report, sep='\n')
+        print(f'Classification Report for {current_sbdh}', report, sep='\n')
 
     return {
         'accuracy': acc,
