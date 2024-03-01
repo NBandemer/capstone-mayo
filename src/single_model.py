@@ -125,11 +125,24 @@ def test_train_split():
 Load the split data
 """
 train = pd.read_csv("/home/nano/Code/ML/Mayo/data/test_train_split/train.csv")
-test = pd.read_csv("/home/nano/Code/ML/Mayo/data/test_train_split/test.csv")
-train = pd.get_dummies(train, columns=["sdoh_community_present", "sdoh_community_absent", "sdoh_education", "sdoh_economics", "sdoh_environment", "behavior_alcohol", "behavior_tobacco", "behavior_drug"])
-test = pd.get_dummies(test, columns=["sdoh_community_present", "sdoh_community_absent", "sdoh_education", "sdoh_economics", "sdoh_environment", "behavior_alcohol", "behavior_tobacco", "behavior_drug"])
-train = train.apply(preprocess_function, axis=1)
-test = test.apply(preprocess_function, axis=1)
+
+X = train['text']
+y = train[:, 1:]
+
+# Split the data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=0, train_size=0.8)
+
+train_data = pd.concat([X_train, y_train], axis=1)
+test_data = pd.concat([X_test, y_test], axis=1)
+
+train_data = train_data.apply(preprocess_function, axis=1)
+test_data = test_data.apply(preprocess_function, axis=1)
+
+# test = pd.read_csv("/home/nano/Code/ML/Mayo/data/test_train_split/test.csv")
+# train = pd.get_dummies(train, columns=["sdoh_community_present", "sdoh_community_absent", "sdoh_education", "sdoh_economics", "sdoh_environment", "behavior_alcohol", "behavior_tobacco", "behavior_drug"])
+# test = pd.get_dummies(test, columns=["sdoh_community_present", "sdoh_community_absent", "sdoh_education", "sdoh_economics", "sdoh_environment", "behavior_alcohol", "behavior_tobacco", "behavior_drug"])
+# train = train.apply(preprocess_function, axis=1)
+# test = test.apply(preprocess_function, axis=1)
 """
 Metrics
 - Get predictions from logits
