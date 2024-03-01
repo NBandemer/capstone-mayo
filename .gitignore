@@ -4,6 +4,7 @@ src/test.py
 graphs
 logs
 saved_models
+models
 /.vscode
 __pycache__
 data/data-old

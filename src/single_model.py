@@ -1,9 +1,12 @@
 import os
+import random
 import pandas as pd
 import numpy as np
 import json
 from sklearn.model_selection import train_test_split
 import torch
+import tqdm
+from transformers import AdamW, get_linear_schedule_with_warmup
 
 from transformers import EarlyStoppingCallback
 
@@ -65,7 +68,7 @@ label2id = {l:k for k, l in enumerate(ALL_LABELS)}
 
 tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
 model = AutoModelForSequenceClassification.from_pretrained(BASE_MODEL, id2label=id2label, label2id=label2id)
-
+model.to(torch.device("cuda"))
 
 def preprocess_function(row: pd.Series):
     labels = [0] * len(ALL_LABELS)
@@ -125,9 +128,10 @@ def test_train_split():
 Load the split data
 """
 train = pd.read_csv("/home/nano/Code/ML/Mayo/data/test_train_split/train.csv")
+train = pd.get_dummies(train, columns=["sdoh_community_present", "sdoh_community_absent", "sdoh_education", "sdoh_economics", "sdoh_environment", "behavior_alcohol", "behavior_tobacco", "behavior_drug"])
 
 X = train['text']
-y = train[:, 1:]
+y = train.iloc[:, 1:]
 
 # Split the data into training and testing sets
 X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=0, train_size=0.8)
@@ -159,10 +163,8 @@ def get_preds_from_logits(logits):
         sdoh_length = len(sdoh_indices)
         best_class_index = np.argmax(logits[:, sdoh_indices], axis=-1)
         ret[list(range(len(ret))), index + best_class_index] = 1
-        print('best',best_class_index)
         index += sdoh_length
     
-    print(ret)
     return ret
 
 example = np.random.uniform(-2, 2, (1, 27))
@@ -208,19 +210,20 @@ class MultiTaskClassificationTrainer(Trainer):
         logits = outputs[0]
         
         sdoh_community_present_loss = torch.nn.functional.cross_entropy(logits[:, SDOH_COMMUNITY_PRESENT_LABELS], labels[:, SDOH_COMMUNITY_PRESENT_LABELS])
-        sdoh_community_absent_loss = torch.nn.functional.binary_cross_entropy_with_logits(logits[:, SDOH_COMMUNITY_ABSENT_LABELS], labels[:, SDOH_COMMUNITY_ABSENT_LABELS])
-        sdoh_education_loss = torch.nn.functional.binary_cross_entropy_with_logits(logits[:, SDOH_EDUCATION_LABELS], labels[:, SDOH_EDUCATION_LABELS])
+        sdoh_community_absent_loss = torch.nn.functional.cross_entropy(logits[:, SDOH_COMMUNITY_ABSENT_LABELS], labels[:, SDOH_COMMUNITY_ABSENT_LABELS])
+        sdoh_education_loss = torch.nn.functional.cross_entropy(logits[:, SDOH_EDUCATION_LABELS], labels[:, SDOH_EDUCATION_LABELS])
         sdoh_economics_loss = torch.nn.functional.cross_entropy(logits[:, SDOH_ECONOMICS_LABELS], labels[:, SDOH_ECONOMICS_LABELS])
-        sdoh_environment_loss = torch.nn.functional.binary_cross_entropy_with_logits(logits[:, SDOH_ENVIRONMENT_LABELS], labels[:, SDOH_ENVIRONMENT_LABELS])
+        sdoh_environment_loss = torch.nn.functional.cross_entropy(logits[:, SDOH_ENVIRONMENT_LABELS], labels[:, SDOH_ENVIRONMENT_LABELS])
         behavior_alcohol_loss = torch.nn.functional.cross_entropy(logits[:, BEHAVIOR_ALCOHOL_LABELS], labels[:, BEHAVIOR_ALCOHOL_LABELS])
-        behavior_tobacco_loss = torch.nn.functional.binary_cross_entropy_with_logits(logits[:, BEHAVIOR_TOBACCO_LABELS], labels[:, BEHAVIOR_TOBACCO_LABELS])
-        behavior_drug_loss = torch.nn.functional.binary_cross_entropy_with_logits(logits[:, BEHAVIOR_DRUG_LABELS], labels[:, BEHAVIOR_DRUG_LABELS])
+        behavior_tobacco_loss = torch.nn.functional.cross_entropy(logits[:, BEHAVIOR_TOBACCO_LABELS], labels[:, BEHAVIOR_TOBACCO_LABELS])
+        behavior_drug_loss = torch.nn.functional.cross_entropy(logits[:, BEHAVIOR_DRUG_LABELS], labels[:, BEHAVIOR_DRUG_LABELS])
         
         loss = 0
 
         for i in range(len(sdohs)):
-            sdoh_loss = globals()[sdohs[i].lower() + "_loss"]
-            loss += self.group_weights[i] * sdoh_loss
+            sdoh_loss = locals()[sdohs[i].lower() + "_loss"]
+            loss += sdoh_loss
+            # loss += self.group_weights[i] * sdoh_loss
 
         return (loss, outputs) if return_outputs else loss
     
@@ -233,6 +236,12 @@ early_stopping = EarlyStoppingCallback(early_stopping_patience=5)
 class PrinterCallback(TrainerCallback):
     def on_epoch_end(self, args, state, control, logs=None, **kwargs):
         print(f"Epoch {state.epoch}: ")
+
+optimizer = AdamW(model.parameters(),
+            lr=LEARNING_RATE, 
+            eps=1e-8)
+
+scheduler = get_linear_schedule_with_warmup(num_warmup_steps=(len(train_data) // BATCH_SIZE) * 0.1, num_training_steps=(len(train_data) // BATCH_SIZE) * EPOCHS, optimizer=optimizer)
 
 training_args = TrainingArguments(
     output_dir="./models/camembert-fine-tuned",
@@ -248,18 +257,75 @@ training_args = TrainingArguments(
     weight_decay=0.01,
 )
 
-# trainer = MultiTaskClassificationTrainer(
-#     model=model,
-#     args=training_args,
-#     train_dataset=ds["train"],
-#     eval_dataset=ds["validation"],
-#     compute_metrics=compute_metrics,
-#     callbacks=[PrinterCallback, early_stopping],
-#     group_weights=(0.7, 4, 4)
-# )
+print(train_data.head())
+
+trainer = MultiTaskClassificationTrainer(
+    model=model,
+    args=training_args,
+    train_dataset=train_data.values,
+    eval_dataset=test_data.values,
+    compute_metrics=compute_metrics,
+    callbacks=[PrinterCallback, early_stopping],
+    optimizers=(optimizer, scheduler)
+    # group_weights=(0.7, 4, 4)
+)
 
 """
 Train the model
 - Should make this manual but not necessary
 """
-# trainer.train()
+trainer.train()
+
+# seed_val = 17
+
+# random.seed(seed_val)
+# np.random.seed(seed_val)
+# torch.manual_seed(seed_val)
+# torch.cuda.manual_seed_all(seed_val)
+# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# model.to(device)
+# print(device)
+# for epoch in tqdm(range(1, EPOCHS+1)):
+#     model.train()
+
+#     loss_train_total = 0
+
+#     progress_bar = tqdm(train_data, desc='Epoch {:1d}'.format(epoch), leave=False, disable=False)
+#     for batch in progress_bar:
+
+#         model.zero_grad()
+    
+#         batch = tuple(b.to(device) for b in batch)
+    
+#         inputs = {'input_ids':      batch[0],
+#             'attention_mask': batch[1],
+#             'labels':         batch[2],
+#             }       
+
+#         outputs = model(**inputs)
+    
+#         loss = outputs[0]
+#         loss_train_total += loss.item()
+#         loss.backward()
+
+#         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+
+#         optimizer.step()
+#         scheduler.step()
+    
+#         progress_bar.set_postfix({'training_loss': '{:.3f}'.format(loss.item()/len(batch))})
+    
+    
+#     torch.save(model.state_dict(), f'finetuned_BERT_epoch_{epoch}.model')
+    
+#     tqdm.write(f'\nEpoch {epoch}')
+
+#     loss_train_avg = loss_train_total/len(dataloader_train)            
+#     tqdm.write(f'Training loss: {loss_train_avg}')
+
+#     val_loss, predictions, true_vals = evaluate(model, dataloader_validation, device)
+#     val_f1 = f1_score_func(predictions, true_vals)
+#     tqdm.write(f'Validation loss: {val_loss}')
+#     tqdm.write(f'F1 Score (Weighted): {val_f1}')
+
+# _, predictions, true_vals = evaluate(model, dataloader_validation, device)
