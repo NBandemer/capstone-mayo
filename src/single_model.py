@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 import torch
 import tqdm
 from transformers import AdamW, get_linear_schedule_with_warmup
-
+from pathlib import Path
 from transformers import EarlyStoppingCallback
 
 from datasets import Dataset, load_metric
@@ -22,6 +22,7 @@ LEARNING_RATE = 5e-5
 MAX_LENGTH = 128
 BATCH_SIZE = 32
 EPOCHS = 50
+pd.options.display.max_columns = None
 
 # SDOHs
 sdohs = ["sdoh_community_present", "sdoh_community_absent", "sdoh_education", "sdoh_economics", "sdoh_environment", "behavior_alcohol", "behavior_tobacco", "behavior_drug"]
@@ -70,19 +71,23 @@ tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
 model = AutoModelForSequenceClassification.from_pretrained(BASE_MODEL, id2label=id2label, label2id=label2id)
 model.to(torch.device("cuda"))
 
-def preprocess_function(row: pd.Series):
-    labels = [0] * len(ALL_LABELS)
+base_path = Path(__file__).parent.parent.resolve()
 
-    for key, value in sdoh_dict.items():
-        for index in range(value):
-            if row[f"{key}_{index}"] == 1:
-                start_index = globals()[key.upper() + "_INDICES"].start
-                labels[start_index + index] = 1
-    # row_sdohs = row[2:10]
-    # labels = row[2:len(row) - 2].values
-    # for key, val in enumerate(labels):
-    #     print(key,val)
-    # print(labels)
+def preprocess_function(row: pd.Series):
+    # labels = [0] * len(ALL_LABELS)
+
+    # for key, value in sdoh_dict.items():
+    #     for index in range(value):
+    #         if row[f"{key}_{index}"] == 1:
+    #             start_index = globals()[key.upper() + "_INDICES"].start
+    #             labels[start_index + index] = 1
+    # # row_sdohs = row[2:10]
+    # # labels = row[2:len(row) - 2].values
+    # # for key, val in enumerate(labels):
+    # #     print(key,val)
+    # # print(labels)
+    labels = row.iloc[1:]
+
     row = tokenizer(row["text"], truncation=True, padding="max_length", max_length=MAX_LENGTH)
     row["label"] = labels
     return row
@@ -97,14 +102,11 @@ def test_train_split():
     """
     This function creates the test_train_split for all the SDoH from the pre processed data
     """
-    df = pd.read_csv("/home/nano/Code/ML/Mayo/data/PREPROCESSED-NOTES-NEW.csv", index_col=0)
+    df = pd.read_csv(os.path.join(base_path, "data/PREPROCESSED-NOTES-NEW.csv"), index_col=0)
     df = df.dropna(subset=["text"])
 
-    dataset = df
-
-    X = dataset["text"]
-    y = dataset.iloc[:, 1:9]
-    print(y.head())
+    X = df["text"]
+    y = df.iloc[:, 1:9]
 
     # Split the data into training and testing sets
     X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=0, train_size=0.8)
@@ -114,7 +116,7 @@ def test_train_split():
     test_data = pd.concat([X_test, y_test], axis=1)
 
     # Create folder for each category
-    category_data_path = "/home/nano/Code/ML/Mayo/data/test_train_split"
+    category_data_path = os.path.join(base_path, "data/test_train_split")
     os.makedirs(category_data_path, exist_ok=True)
 
     # Save train and test data to seprate csvs
@@ -127,8 +129,8 @@ def test_train_split():
 """
 Load the split data
 """
-train = pd.read_csv("/home/nano/Code/ML/Mayo/data/test_train_split/train.csv")
-train = pd.get_dummies(train, columns=["sdoh_community_present", "sdoh_community_absent", "sdoh_education", "sdoh_economics", "sdoh_environment", "behavior_alcohol", "behavior_tobacco", "behavior_drug"])
+train = pd.read_csv(os.path.join(base_path, "data/test_train_split/train.csv"))
+train = pd.get_dummies(train, columns=["sdoh_community_present", "sdoh_community_absent", "sdoh_education", "sdoh_economics", "sdoh_environment", "behavior_alcohol", "behavior_tobacco", "behavior_drug"], dtype=int)
 
 X = train['text']
 y = train.iloc[:, 1:]
@@ -183,12 +185,18 @@ def compute_metrics(eval_pred):
         final_metrics[f'f1_micro_{sdoh}'] = f1_score(labels[:, index], predictions[:, index], average="micro")
         final_metrics[f'f1_macro_{sdoh}'] = f1_score(labels[:, index], predictions[:, index], average="macro")
 
+        final_metrics[f'accuracy_micro_{sdoh}'] = accuracy_score(labels[:, index], predictions[:, index], average="micro")
+        final_metrics[f'accuracy_macro_{sdoh}'] = accuracy_score(labels[:, index], predictions[:, index], average="macro")
+
         print(f"Classification report for {sdoh}: ")
         print(classification_report(labels[:, index], predictions[:, index], zero_division=0))
 
     # The global f1_metrics
     final_metrics["f1_micro"] = f1_score(labels, predictions, average="micro")
     final_metrics["f1_macro"] = f1_score(labels, predictions, average="macro")
+
+    final_metrics["accuracy_micro"] = accuracy_score(labels, predictions, average="micro")
+    final_metrics["accuracy_macro"] = accuracy_score(labels, predictions, average="macro")
     
     return final_metrics
 
