@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import json
 from sklearn.model_selection import train_test_split
+from sklearn.utils import compute_class_weight
 import torch
 import tqdm
 from transformers import AdamW, get_linear_schedule_with_warmup
@@ -74,20 +75,7 @@ model.to(torch.device("cuda"))
 base_path = Path(__file__).parent.parent.resolve()
 
 def preprocess_function(row: pd.Series):
-    # labels = [0] * len(ALL_LABELS)
-
-    # for key, value in sdoh_dict.items():
-    #     for index in range(value):
-    #         if row[f"{key}_{index}"] == 1:
-    #             start_index = globals()[key.upper() + "_INDICES"].start
-    #             labels[start_index + index] = 1
-    # # row_sdohs = row[2:10]
-    # # labels = row[2:len(row) - 2].values
-    # # for key, val in enumerate(labels):
-    # #     print(key,val)
-    # # print(labels)
     labels = row.iloc[1:]
-
     row = tokenizer(row["text"], truncation=True, padding="max_length", max_length=MAX_LENGTH)
     row["label"] = labels
     return row
@@ -126,10 +114,34 @@ def test_train_split():
 
 # test_train_split()
 
-"""
+def get_class_weights(y_train):
+    """
+    This function calculates the weighted loss for the given training data
+    """
+    y_train = y_train.iloc[:, 1:]
+    all_weights = []
+
+    for sdoh in sdohs:
+        sdoh_y = y_train[sdoh]
+        class_weights = compute_class_weight('balanced', classes=np.unique(sdoh_y), y=sdoh_y)
+        # Create a dictionary to hold the class weights
+        weight_dict = {i: float(class_weights[i]) for i in range(len(class_weights))}
+        # Convert the dictionary to a tensor
+        weights = torch.tensor([weight_dict[key] for key in range(len(weight_dict))])
+        all_weights.append(weights)
+    # Assuming your list of tensors is named 'tensor_list'
+    new_all_weights = [float(item) for sublist in all_weights for item in sublist]
+
+    return new_all_weights
+
+""" 
 Load the split data
 """
 train = pd.read_csv(os.path.join(base_path, "data/test_train_split/train.csv"))
+
+weights = torch.tensor(get_class_weights(train))
+
+
 train = pd.get_dummies(train, columns=["sdoh_community_present", "sdoh_community_absent", "sdoh_education", "sdoh_economics", "sdoh_environment", "behavior_alcohol", "behavior_tobacco", "behavior_drug"], dtype=int)
 
 X = train['text']
@@ -169,9 +181,6 @@ def get_preds_from_logits(logits):
     
     return ret
 
-example = np.random.uniform(-2, 2, (1, 27))
-print(get_preds_from_logits(example))
-
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
     final_metrics = {}
@@ -185,8 +194,8 @@ def compute_metrics(eval_pred):
         final_metrics[f'f1_micro_{sdoh}'] = f1_score(labels[:, index], predictions[:, index], average="micro")
         final_metrics[f'f1_macro_{sdoh}'] = f1_score(labels[:, index], predictions[:, index], average="macro")
 
-        final_metrics[f'accuracy_micro_{sdoh}'] = accuracy_score(labels[:, index], predictions[:, index], average="micro")
-        final_metrics[f'accuracy_macro_{sdoh}'] = accuracy_score(labels[:, index], predictions[:, index], average="macro")
+        # final_metrics[f'accuracy_micro_{sdoh}'] = accuracy_score(labels[:, index], predictions[:, index], average="micro")
+        final_metrics[f'accuracy_macro_{sdoh}'] = accuracy_score(labels[:, index], predictions[:, index])
 
         print(f"Classification report for {sdoh}: ")
         print(classification_report(labels[:, index], predictions[:, index], zero_division=0))
@@ -195,8 +204,8 @@ def compute_metrics(eval_pred):
     final_metrics["f1_micro"] = f1_score(labels, predictions, average="micro")
     final_metrics["f1_macro"] = f1_score(labels, predictions, average="macro")
 
-    final_metrics["accuracy_micro"] = accuracy_score(labels, predictions, average="micro")
-    final_metrics["accuracy_macro"] = accuracy_score(labels, predictions, average="macro")
+    # final_metrics["accuracy_micro"] = accuracy_score(labels, predictions, average="micro")
+    final_metrics["accuracy_macro"] = accuracy_score(labels, predictions)
     
     return final_metrics
 
@@ -212,27 +221,21 @@ class MultiTaskClassificationTrainer(Trainer):
     """
     Overriding the compute_loss method
     """
+    
     def compute_loss(self, model, inputs, return_outputs=False):
         labels = inputs.pop("labels")
         outputs = model(**inputs)
         logits = outputs[0]
-        
-        sdoh_community_present_loss = torch.nn.functional.cross_entropy(logits[:, SDOH_COMMUNITY_PRESENT_LABELS], labels[:, SDOH_COMMUNITY_PRESENT_LABELS])
-        sdoh_community_absent_loss = torch.nn.functional.cross_entropy(logits[:, SDOH_COMMUNITY_ABSENT_LABELS], labels[:, SDOH_COMMUNITY_ABSENT_LABELS])
-        sdoh_education_loss = torch.nn.functional.cross_entropy(logits[:, SDOH_EDUCATION_LABELS], labels[:, SDOH_EDUCATION_LABELS])
-        sdoh_economics_loss = torch.nn.functional.cross_entropy(logits[:, SDOH_ECONOMICS_LABELS], labels[:, SDOH_ECONOMICS_LABELS])
-        sdoh_environment_loss = torch.nn.functional.cross_entropy(logits[:, SDOH_ENVIRONMENT_LABELS], labels[:, SDOH_ENVIRONMENT_LABELS])
-        behavior_alcohol_loss = torch.nn.functional.cross_entropy(logits[:, BEHAVIOR_ALCOHOL_LABELS], labels[:, BEHAVIOR_ALCOHOL_LABELS])
-        behavior_tobacco_loss = torch.nn.functional.cross_entropy(logits[:, BEHAVIOR_TOBACCO_LABELS], labels[:, BEHAVIOR_TOBACCO_LABELS])
-        behavior_drug_loss = torch.nn.functional.cross_entropy(logits[:, BEHAVIOR_DRUG_LABELS], labels[:, BEHAVIOR_DRUG_LABELS])
-        
-        loss = 0
+        losses = []
 
-        for i in range(len(sdohs)):
-            sdoh_loss = locals()[sdohs[i].lower() + "_loss"]
-            loss += sdoh_loss
-            # loss += self.group_weights[i] * sdoh_loss
+        self.group_weights = self.group_weights.to(logits.device) 
+        
+        for sdoh in sdohs:
+            sdoh_indices = globals()[sdoh.upper() + "_INDICES"]
+            sdoh_slice = slice(sdoh_indices.start, sdoh_indices.stop)
 
+            losses.append(torch.nn.functional.cross_entropy(logits[:, sdoh_slice], labels[:, sdoh_slice], weight=self.group_weights[sdoh_slice]))
+        loss = sum(losses)
         return (loss, outputs) if return_outputs else loss
     
 """
@@ -265,8 +268,6 @@ training_args = TrainingArguments(
     weight_decay=0.01,
 )
 
-print(train_data.head())
-
 trainer = MultiTaskClassificationTrainer(
     model=model,
     args=training_args,
@@ -274,8 +275,8 @@ trainer = MultiTaskClassificationTrainer(
     eval_dataset=test_data.values,
     compute_metrics=compute_metrics,
     callbacks=[PrinterCallback, early_stopping],
-    optimizers=(optimizer, scheduler)
-    # group_weights=(0.7, 4, 4)
+    optimizers=(optimizer, scheduler),
+    group_weights=weights
 )
 
 """
