@@ -1,5 +1,6 @@
 import os
 import random
+import shutil
 import pandas as pd
 import numpy as np
 import json
@@ -17,6 +18,8 @@ from torch.utils.data import DataLoader
 
 from sklearn.metrics import f1_score, accuracy_score
 from sklearn.metrics import classification_report
+
+from helper import plot_metric_from_tensor
 
 BASE_MODEL = "emilyalsentzer/Bio_ClinicalBERT"
 LEARNING_RATE = 5e-5
@@ -62,19 +65,17 @@ SDOH_ENVIRONMENT_INDICES = range(9, 12)
 BEHAVIOR_ALCOHOL_INDICES = range(12, 17)
 BEHAVIOR_TOBACCO_INDICES = range(17, 22)
 BEHAVIOR_DRUG_INDICES = range(22, 27)
+MAX_LENGTH = 128
 
 ALL_LABELS = SDOH_COMMUNITY_PRESENT_LABELS + SDOH_COMMUNITY_ABSENT_LABELS + SDOH_EDUCATION_LABELS + SDOH_ECONOMICS_LABELS + SDOH_ENVIRONMENT_LABELS + BEHAVIOR_ALCOHOL_LABELS + BEHAVIOR_TOBACCO_LABELS + BEHAVIOR_DRUG_LABELS
 
 id2label = {k:l for k, l in enumerate(ALL_LABELS)}
 label2id = {l:k for k, l in enumerate(ALL_LABELS)}
 
-tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
-model = AutoModelForSequenceClassification.from_pretrained(BASE_MODEL, id2label=id2label, label2id=label2id)
-model.to(torch.device("cuda"))
 
 base_path = Path(__file__).parent.parent.resolve()
 
-def preprocess_function(row: pd.Series):
+def preprocess_function(row: pd.Series, tokenizer):
     labels = row.iloc[1:]
     row = tokenizer(row["text"], truncation=True, padding="max_length", max_length=MAX_LENGTH)
     row["label"] = labels
@@ -242,48 +243,104 @@ class MultiTaskClassificationTrainer(Trainer):
 Set training parameters
 """
 
-early_stopping = EarlyStoppingCallback(early_stopping_patience=5)
-
 class PrinterCallback(TrainerCallback):
     def on_epoch_end(self, args, state, control, logs=None, **kwargs):
         print(f"Epoch {state.epoch}: ")
 
-optimizer = AdamW(model.parameters(),
-            lr=LEARNING_RATE, 
-            eps=1e-8)
 
-scheduler = get_linear_schedule_with_warmup(num_warmup_steps=(len(train_data) // BATCH_SIZE) * 0.1, num_training_steps=(len(train_data) // BATCH_SIZE) * EPOCHS, optimizer=optimizer)
-
-training_args = TrainingArguments(
-    output_dir="./models/camembert-fine-tuned",
-    learning_rate=LEARNING_RATE,
-    per_device_train_batch_size=BATCH_SIZE,
-    per_device_eval_batch_size=BATCH_SIZE,
-    num_train_epochs=EPOCHS,
-    evaluation_strategy="epoch",
-    save_strategy="epoch",
-    save_total_limit=2,
-    metric_for_best_model="f1_macro",
-    load_best_model_at_end=True,
-    weight_decay=0.01,
-)
-
-trainer = MultiTaskClassificationTrainer(
-    model=model,
-    args=training_args,
-    train_dataset=train_data.values,
-    eval_dataset=test_data.values,
-    compute_metrics=compute_metrics,
-    callbacks=[PrinterCallback, early_stopping],
-    optimizers=(optimizer, scheduler),
-    group_weights=weights
-)
 
 """
 Train the model
 - Should make this manual but not necessary
 """
-trainer.train()
+def train():
+    tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
+    model = AutoModelForSequenceClassification.from_pretrained(BASE_MODEL, id2label=id2label, label2id=label2id)
+    model.to(torch.device("cuda"))
+
+    optimizer = AdamW(model.parameters(),
+                lr=LEARNING_RATE, 
+                eps=1e-8)
+
+    scheduler = get_linear_schedule_with_warmup(num_warmup_steps=(len(train_data) // BATCH_SIZE) * 0.1, num_training_steps=(len(train_data) // BATCH_SIZE) * EPOCHS, optimizer=optimizer)
+    early_stopping = EarlyStoppingCallback(early_stopping_patience=5)
+
+    training_args = TrainingArguments(
+        output_dir="./models/camembert-fine-tuned",
+        learning_rate=LEARNING_RATE,
+        per_device_train_batch_size=BATCH_SIZE,
+        per_device_eval_batch_size=BATCH_SIZE,
+        num_train_epochs=EPOCHS,
+        evaluation_strategy="epoch",
+        save_strategy="epoch",
+        save_total_limit=2,
+        metric_for_best_model="f1_macro",
+        load_best_model_at_end=True,
+        weight_decay=0.01,
+    )
+
+    trainer = MultiTaskClassificationTrainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_data.values,
+        eval_dataset=test_data.values,
+        compute_metrics=compute_metrics,
+        callbacks=[PrinterCallback, early_stopping],
+        optimizers=(optimizer, scheduler),
+        group_weights=weights
+    )
+
+    trainer.train()
+
+    print("Training complete")
+
+    graph_path = os.path.join(project_base_path, f'graphs')
+    os.makedirs(graph_path, exist_ok=True)
+
+    plot_metric_from_tensor(tensor_logs, f'{graph_path}/metrics_plot.jpg')
+
+    # Saving the model
+    save_directory = os.path.join(project_base_path, f'saved_models')
+    os.makedirs(save_directory, exist_ok=True)
+    model.save_pretrained(save_directory)
+    tokenizer.save_pretrained(save_directory)
+
+def test():
+    test = pd.read_csv(os.path.join(base_path, "data/test_train_split/test.csv"))
+
+    test = pd.get_dummies(test, columns=["sdoh_community_present", "sdoh_community_absent", "sdoh_education", "sdoh_economics", "sdoh_environment", "behavior_alcohol", "behavior_tobacco", "behavior_drug"], dtype=int)
+
+    X = test['text']
+    y = test.iloc[:, 1:]
+
+    test_data = pd.concat([X, y_train], axis=1)
+    test_data = test_data.apply(preprocess_function, axis=1)
+       
+    saved_model = '/home/nano/Code/ML/Mayo/models/camembert-fine-tuned/checkpoint-3525'
+    model =  AutoModelForSequenceClassification.from_pretrained(saved_model)
+
+    trainer = MultiTaskClassificationTrainer(
+        model=model,
+        eval_dataset=test_data.values,
+        compute_metrics=compute_metrics,
+    )
+
+    model.eval()
+    results = trainer.evaluate()
+    print("Evaluation Results:", results)
+
+test()
+    # # Save evaluation results to a CSV file
+    # results_df = pd.DataFrame([results])
+    # results_path = os.path.join(project_base_path, f'test_results/{self.Sdoh_name}_before')
+    # os.makedirs(results_path, exist_ok=True)
+    # results_df.to_csv(f"{results_path}/results.csv", index=False)
+    # print("Evaluation results saved to:", results_path)
+
+    # # Clean up temp files
+    # tmp_dir = os.path.join(os.getcwd(), 'tmp_trainer')
+    # if os.path.exists(tmp_dir):
+    #     shutil.rmtree(tmp_dir)
 
 # seed_val = 17
 
