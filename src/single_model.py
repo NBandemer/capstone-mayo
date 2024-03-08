@@ -78,6 +78,8 @@ tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
 model = AutoModelForSequenceClassification.from_pretrained(BASE_MODEL, id2label=id2label, label2id=label2id)
 model.to(torch.device("cuda"))
 
+print(model)
+
 def preprocess_function(row: pd.Series, tokenizer):
     labels = row.iloc[1:]
     row = tokenizer(row["text"], truncation=True, padding="max_length", max_length=MAX_LENGTH)

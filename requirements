@@ -3,3 +3,7 @@ pandas
 scikit-learn
 transformers
 matplotlib
+numpy
+tqdm
+datasets
+tensorboard
