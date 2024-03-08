@@ -25,7 +25,7 @@ BASE_MODEL = "emilyalsentzer/Bio_ClinicalBERT"
 LEARNING_RATE = 5e-5
 MAX_LENGTH = 128
 BATCH_SIZE = 32
-EPOCHS = 50
+EPOCHS = 1
 pd.options.display.max_columns = None
 
 # SDOHs
@@ -72,8 +72,11 @@ ALL_LABELS = SDOH_COMMUNITY_PRESENT_LABELS + SDOH_COMMUNITY_ABSENT_LABELS + SDOH
 id2label = {k:l for k, l in enumerate(ALL_LABELS)}
 label2id = {l:k for k, l in enumerate(ALL_LABELS)}
 
-
 base_path = Path(__file__).parent.parent.resolve()
+
+tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
+model = AutoModelForSequenceClassification.from_pretrained(BASE_MODEL, id2label=id2label, label2id=label2id)
+model.to(torch.device("cuda"))
 
 def preprocess_function(row: pd.Series, tokenizer):
     labels = row.iloc[1:]
@@ -254,10 +257,6 @@ Train the model
 - Should make this manual but not necessary
 """
 def train():
-    tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
-    model = AutoModelForSequenceClassification.from_pretrained(BASE_MODEL, id2label=id2label, label2id=label2id)
-    model.to(torch.device("cuda"))
-
     optimizer = AdamW(model.parameters(),
                 lr=LEARNING_RATE, 
                 eps=1e-8)
@@ -319,7 +318,7 @@ def train():
     plot_metric_from_tensor("./logs/tensor_logs", f'{graph_path}/metrics_plot.jpg')
 
     # Saving the model
-    save_directory = os.path.join(base_path, f'saved_models')
+    save_directory = os.path.join(base_path, 'saved_models/single-model')
     os.makedirs(save_directory, exist_ok=True)
     model.save_pretrained(save_directory)
     tokenizer.save_pretrained(save_directory)
@@ -334,10 +333,10 @@ def test():
     X = test['text']
     y = test.iloc[:, 1:]
 
-    test_data = pd.concat([X, y_train], axis=1)
-    test_data = test_data.apply(preprocess_function, axis=1)
+    test_data = pd.concat([X, y], axis=1)
+    test_data = test_data.apply(preprocess_function, tokenizer=tokenizer, axis=1)
        
-    saved_model = '/home/nano/Code/ML/Mayo/models/camembert-fine-tuned/checkpoint-3525'
+    saved_model = os.path.join(base_path, 'saved_model/single-model')
     model =  AutoModelForSequenceClassification.from_pretrained(saved_model)
 
     trainer = MultiTaskClassificationTrainer(
@@ -350,7 +349,7 @@ def test():
     results = trainer.evaluate()
     print("Evaluation Results:", results)
 
-# test()
+test()
     
     # # Save evaluation results to a CSV file
     # results_df = pd.DataFrame([results])
