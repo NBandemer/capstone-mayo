@@ -138,24 +138,24 @@ def get_class_weights(y_train):
 """ 
 Load the split data
 """
-train = pd.read_csv(os.path.join(base_path, "data/test_train_split/train.csv"))
+# train = pd.read_csv(os.path.join(base_path, "data/test_train_split/train.csv"))
 
-weights = torch.tensor(get_class_weights(train))
+# weights = torch.tensor(get_class_weights(train))
 
 
-train = pd.get_dummies(train, columns=["sdoh_community_present", "sdoh_community_absent", "sdoh_education", "sdoh_economics", "sdoh_environment", "behavior_alcohol", "behavior_tobacco", "behavior_drug"], dtype=int)
+# train = pd.get_dummies(train, columns=["sdoh_community_present", "sdoh_community_absent", "sdoh_education", "sdoh_economics", "sdoh_environment", "behavior_alcohol", "behavior_tobacco", "behavior_drug"], dtype=int)
 
-X = train['text']
-y = train.iloc[:, 1:]
+# X = train['text']
+# y = train.iloc[:, 1:]
 
-# Split the data into training and testing sets
-X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=0, train_size=0.8)
+# # Split the data into training and testing sets
+# X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=0, train_size=0.8)
 
-train_data = pd.concat([X_train, y_train], axis=1)
-test_data = pd.concat([X_test, y_test], axis=1)
+# train_data = pd.concat([X_train, y_train], axis=1)
+# test_data = pd.concat([X_test, y_test], axis=1)
 
-train_data = train_data.apply(preprocess_function, axis=1)
-test_data = test_data.apply(preprocess_function, axis=1)
+# train_data = train_data.apply(preprocess_function(tokenizer=A), axis=1)
+# test_data = test_data.apply(preprocess_function, axis=1)
 
 # test = pd.read_csv("/home/nano/Code/ML/Mayo/data/test_train_split/test.csv")
 # train = pd.get_dummies(train, columns=["sdoh_community_present", "sdoh_community_absent", "sdoh_education", "sdoh_economics", "sdoh_environment", "behavior_alcohol", "behavior_tobacco", "behavior_drug"])
@@ -262,11 +262,30 @@ def train():
                 lr=LEARNING_RATE, 
                 eps=1e-8)
 
+    train = pd.read_csv(os.path.join(base_path, "data/test_train_split/train.csv"))
+
+    weights = torch.tensor(get_class_weights(train))
+
+    train = pd.get_dummies(train, columns=["sdoh_community_present", "sdoh_community_absent", "sdoh_education", "sdoh_economics", "sdoh_environment", "behavior_alcohol", "behavior_tobacco", "behavior_drug"], dtype=int)
+
+    X = train['text']
+    y = train.iloc[:, 1:]
+
+    # Split the data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=0, train_size=0.8)
+
+    train_data = pd.concat([X_train, y_train], axis=1)
+    test_data = pd.concat([X_test, y_test], axis=1)
+
+    train_data = train_data.apply(preprocess_function, tokenizer=tokenizer, axis=1)
+    test_data = test_data.apply(preprocess_function, tokenizer=tokenizer, axis=1)
+
     scheduler = get_linear_schedule_with_warmup(num_warmup_steps=(len(train_data) // BATCH_SIZE) * 0.1, num_training_steps=(len(train_data) // BATCH_SIZE) * EPOCHS, optimizer=optimizer)
     early_stopping = EarlyStoppingCallback(early_stopping_patience=5)
 
     training_args = TrainingArguments(
-        output_dir="./models/camembert-fine-tuned",
+        output_dir="./logs/output-dir",
+        logging_dir="./logs/tensor_logs",
         learning_rate=LEARNING_RATE,
         per_device_train_batch_size=BATCH_SIZE,
         per_device_eval_batch_size=BATCH_SIZE,
@@ -294,16 +313,18 @@ def train():
 
     print("Training complete")
 
-    graph_path = os.path.join(project_base_path, f'graphs')
+    graph_path = os.path.join(base_path, f'graphs')
     os.makedirs(graph_path, exist_ok=True)
 
-    plot_metric_from_tensor(tensor_logs, f'{graph_path}/metrics_plot.jpg')
+    plot_metric_from_tensor("./logs/tensor_logs", f'{graph_path}/metrics_plot.jpg')
 
     # Saving the model
-    save_directory = os.path.join(project_base_path, f'saved_models')
+    save_directory = os.path.join(base_path, f'saved_models')
     os.makedirs(save_directory, exist_ok=True)
     model.save_pretrained(save_directory)
     tokenizer.save_pretrained(save_directory)
+
+train()
 
 def test():
     test = pd.read_csv(os.path.join(base_path, "data/test_train_split/test.csv"))
@@ -329,7 +350,8 @@ def test():
     results = trainer.evaluate()
     print("Evaluation Results:", results)
 
-test()
+# test()
+    
     # # Save evaluation results to a CSV file
     # results_df = pd.DataFrame([results])
     # results_path = os.path.join(project_base_path, f'test_results/{self.Sdoh_name}_before')
