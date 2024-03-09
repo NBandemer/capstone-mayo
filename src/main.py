@@ -3,16 +3,16 @@ import argparse
 from pathlib import Path
 import json
 
-# sdoh_list = {
-#     "sdoh_community_present": 2,
-#     "sdoh_community_absent": 2,
-#     "sdoh_education": 2,
-#     "sdoh_economics": 2,
-#     "sdoh_environment": 2,
-#     "behavior_alcohol": 5,
-#     "behavior_tobacco": 5,
-#     "behavior_drug": 5
-# }
+sdoh_list = {
+    "sdoh_community_present": 2,
+    "sdoh_community_absent": 2,
+    "sdoh_education": 2,
+    "sdoh_economics": 2,
+    "sdoh_environment": 2,
+    "behavior_alcohol": 5,
+    "behavior_tobacco": 5,
+    "behavior_drug": 5
+}
 
 project_base_path = Path(__file__).parent.parent.resolve()
 
@@ -74,10 +74,13 @@ if args.split:
         print('Invalid data file path: ', config.data)
     exit(1)
 
-# If not data split mode, then train or test mode, so initiate model
-model = Model(config.sdoh, int(config.num_labels), config.model, int(config.epochs), int(config.batch), project_base_path)
+for sdoh in sdoh_list:
+    num_labels = sdoh_list[sdoh]
+    
+    # If not data split mode, then train or test mode, so initiate model
+    model = Model(sdoh, num_labels, config.model, int(config.epochs), int(config.batch), project_base_path, bool(config.balanced), bool(config.weighted))
 
-if args.eval: #evaluation mode
-    model.test()
-else:
-    model.train()
+    if args.eval: #evaluation mode
+        model.test()
+    else:
+        model.train()
