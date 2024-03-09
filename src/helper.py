@@ -1,5 +1,5 @@
 import numpy as np
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, roc_curve
 from sklearn.metrics import ConfusionMatrixDisplay, RocCurveDisplay
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
@@ -128,11 +128,13 @@ def compute_metrics(eval_pred, test=True):
             current_sbdh_dict = sbdh_community_ed
         
         for key, value in current_sbdh_dict.items():
-            report[value] = report[str(key)]
+            report[f'{key}_{value}'] = report[str(key)]
             del report[str(key)]
-            print(f'Classification Report for {current_sbdh}', report, sep='\n')
         
         # ROC Curve
+        
+        fpr, tpr, thresholds = roc_curve(labels, preds)
+        best_threshold = thresholds[np.argmax(tpr - fpr)]
         roc = RocCurveDisplay.from_predictions(labels, preds)
 
     return {
@@ -143,7 +145,8 @@ def compute_metrics(eval_pred, test=True):
         'auc': auc,
         'classification_report': report,
         'roc': roc,
-        'cm': cm
+        'cm': cm,
+        'threshold': best_threshold
     }
 
 

@@ -3,7 +3,7 @@ import argparse
 from pathlib import Path
 import json
 
-sdoh_list = {
+sdoh_to_labels = {
     "sdoh_community_present": 2,
     "sdoh_community_absent": 2,
     "sdoh_education": 2,
@@ -45,10 +45,6 @@ with open(json_path) as json_file:
         print('Missing required argument (sdoh)!')
         invalid = True
 
-    if 'num_labels' not in config:
-        print('Missing required argument (num_labels)!')
-        invalid = True
-
     if 'model' not in config:
         print('Missing required argument (model)!')
         invalid = True
@@ -74,13 +70,13 @@ if args.split:
         print('Invalid data file path: ', config.data)
     exit(1)
 
-for sdoh in sdoh_list:
-    num_labels = sdoh_list[sdoh]
+# for sdoh in sdoh_list:
+    # num_labels = sdoh_list[sdoh]
     
-    # If not data split mode, then train or test mode, so initiate model
-    model = Model(sdoh, num_labels, config.model, int(config.epochs), int(config.batch), project_base_path, bool(config.balanced), bool(config.weighted))
+# If not data split mode, then train or test mode, so initiate model
+model = Model(config.sdoh, sdoh_to_labels[config.sdoh], config.model, int(config.epochs), int(config.batch), project_base_path, bool(config.balanced), bool(config.weighted))
 
-    if args.eval: #evaluation mode
-        model.test()
-    else:
-        model.train()
+if args.eval: #evaluation mode
+    model.test()
+else:
+    model.train()

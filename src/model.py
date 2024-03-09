@@ -1,4 +1,5 @@
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
+import numpy as np
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, TextClassificationPipeline
 from transformers import TrainingArguments, Trainer
 from transformers import AdamW, get_linear_schedule_with_warmup
 from transformers import EarlyStoppingCallback
@@ -8,7 +9,7 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 
 import pandas as pd
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedKFold
 
 import datetime
 import warnings
@@ -82,6 +83,10 @@ class Model():
         self.weighted = weighted
 
     def train(self):
+        if self.balanced and self.weighted:
+            print("Both balanced and weighted flags are set, please set only one of them")
+            exit(1)
+
         data_path = os.path.join(self.project_base_path, f"data/test_train_split/{self.Sdoh_name}/")
         data_file = 'train.csv'
         df = pd.read_csv(os.path.join(data_path, data_file))
@@ -89,91 +94,91 @@ class Model():
         x = df['text']
         y = df[self.Sdoh_name]
 
-        # Select 20% of training data for validation
-        X_train, X_val, y_train, y_val = train_test_split(x, y, test_size=0.2, random_state=42, stratify=y)
-        
-        if self.balanced and self.weighted:
-            print("Both balanced and weighted flags are set, please set only one of them")
-            exit(1)
-
-        # Handle class imbalance in training data
-        if self.balanced:
-            df_train = pd.DataFrame({'X': X_train, 'y': y_train})
-            balanced_train = balance_data(df_train)
-
-            # Convert back to lists if needed
-            list_train_x = balanced_train['X'].tolist()
-            list_train_y = balanced_train['y'].tolist()
-            list_val_x = X_val.tolist()
-            list_val_y = y_val.tolist()
-        else:
-            list_train_x = X_train.tolist()
-            list_train_y = y_train.tolist()
-            list_val_x = X_val.tolist()
-            list_val_y = y_val.tolist()
-
-        max_seq_length = 128 
-
-        # Truncate and tokenize your input data
-        train_encodings = self.tokenizer(list_train_x, truncation=True, padding='max_length', max_length=max_seq_length, return_tensors='pt')
-        val_encodings = self.tokenizer(list_val_x, truncation=True, padding='max_length', max_length=max_seq_length, return_tensors='pt')
-        
-        train_dataset = MIMICDataset(
-            train_encodings,
-            list_train_y
-        )
-
-        val_dataset = MIMICDataset(
-            val_encodings,
-            list_val_y
-        )
-
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        tensor_logs = os.path.join(self.project_base_path, f'logs/{self.Sdoh_name}/tensor_logs/logs_{timestamp}')
-        os.makedirs(tensor_logs, exist_ok=True)
-
-        epoch_logs = os.path.join(self.project_base_path, f'logs/{self.Sdoh_name}/epoch_logs/logs_{timestamp}')
-        os.makedirs(epoch_logs, exist_ok=True)
-
-        early_stopping = EarlyStoppingCallback(early_stopping_patience=5)
-
-        # train_loader = DataLoader(train_dataset, batch_size=self.batch, shuffle=True)
-        # val_loader = DataLoader(val_dataset, batch_size=self.batch, shuffle=True)
+        MAX_LENGTH = 128 
+        early_stopping = EarlyStoppingCallback(early_stopping_patience=3)
         optimizer = AdamW(self.model.parameters(), lr=5e-5)
-
-        training_args = TrainingArguments(
-            output_dir=epoch_logs,
-            logging_dir=tensor_logs,
-            save_strategy='epoch',
-            num_train_epochs=self.epochs,
-            per_device_train_batch_size=self.batch,  
-            per_device_eval_batch_size=self.batch,
-            weight_decay=1e-5,
-            evaluation_strategy="epoch",
-            load_best_model_at_end=True,
-            metric_for_best_model='eval_loss'
-        )
-        
-        len(train_dataset) // self.batch
-
-        num_training_steps = (len(train_dataset) // self.batch) * self.epochs
-        num_warmup_steps = (len(train_dataset) // self.batch) * 0.1
-
-        trainer = CustomTrainer(
-            model=self.model,
-            args=training_args,
-            train_dataset=train_dataset,
-            eval_dataset=val_dataset,
-            callbacks=[early_stopping],
-            test=False,
-            optimizers=(optimizer, get_linear_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps))
-        )
-
         if self.weighted:
             self.weights = get_class_weights(list_train_y)
 
-        trainer.train()
+        # Implement 5-fold stratified cross val
+        skf = StratifiedKFold(n_splits=5, random_state=42, shuffle=True)
+        for train, test in skf.split(x, y):
+            X_train, X_val = x.iloc[train], x.iloc[test]
+            y_train, y_val = y.iloc[train], y.iloc[test]
+            epoch_training_steps = len(X_train) // self.batch
+            num_training_steps = epoch_training_steps * self.epochs
+            num_warmup_steps = epoch_training_steps * 0.1
+            scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
+            optimizers = (optimizer, scheduler)
+
+        # Select 20% of training data for validation
+        # X_train, X_val, y_train, y_val = train_test_split(x, y, test_size=0.2, random_state=42, stratify=y)
+
+            # Handle class imbalance in training data
+            if self.balanced:
+                df_train = pd.DataFrame({'X': X_train, 'y': y_train})
+                balanced_train = balance_data(df_train)
+
+                # Convert back to lists if needed
+                list_train_x = balanced_train['X'].tolist()
+                list_train_y = balanced_train['y'].tolist()
+                list_val_x = X_val.tolist()
+                list_val_y = y_val.tolist()
+            else:
+                list_train_x = X_train.tolist()
+                list_train_y = y_train.tolist()
+                list_val_x = X_val.tolist()
+                list_val_y = y_val.tolist()
+
+
+            # Truncate and tokenize your input data
+            train_encodings = self.tokenizer(list_train_x, truncation=True, padding='max_length', max_length=MAX_LENGTH, return_tensors='pt')
+            val_encodings = self.tokenizer(list_val_x, truncation=True, padding='max_length', max_length=MAX_LENGTH, return_tensors='pt')
+            
+            train_dataset = MIMICDataset(
+                train_encodings,
+                list_train_y
+            )
+
+            val_dataset = MIMICDataset(
+                val_encodings,
+                list_val_y
+            )
+
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            tensor_logs = os.path.join(self.project_base_path, f'logs/{self.Sdoh_name}/tensor_logs/logs_{timestamp}')
+            os.makedirs(tensor_logs, exist_ok=True)
+
+            epoch_logs = os.path.join(self.project_base_path, f'logs/{self.Sdoh_name}/epoch_logs/logs_{timestamp}')
+            os.makedirs(epoch_logs, exist_ok=True)
+
+            training_args = TrainingArguments(
+                output_dir=epoch_logs,
+                logging_dir=tensor_logs,
+                save_strategy='epoch',
+                num_train_epochs=self.epochs,
+                per_device_train_batch_size=self.batch,  
+                per_device_eval_batch_size=self.batch,
+                weight_decay=1e-5,
+                evaluation_strategy="epoch",
+                load_best_model_at_end=True,
+                metric_for_best_model='eval_loss'
+            )
+        
+            print('Training steps per epoch:',epoch_training_steps)
+
+            trainer = CustomTrainer(
+                model=self.model,
+                args=training_args,
+                train_dataset=train_dataset,
+                eval_dataset=val_dataset,
+                callbacks=[early_stopping],
+                test=False,
+                optimizers=optimizers,
+            )
+
+            trainer.train()
 
         # for epoch in range(3):
         #     for batch in train_loader:
@@ -222,7 +227,17 @@ class Model():
         )
 
         saved_model = os.path.join(self.project_base_path, f'saved_models/{self.Sdoh_name}')
+
+        if self.balanced:
+            saved_model += '_balanced'
+        if self.weighted:
+            self.weights = get_class_weights(eval_labels)
+            saved_model += '_weighted'
+        
         model =  AutoModelForSequenceClassification.from_pretrained(saved_model)
+        pipe = TextClassificationPipeline(model=model, tokenizer=self.tokenizer, return_all_scores=True)
+        print(pipe(eval_inputs[0]))
+        print(pipe(eval_inputs[5]))
 
         trainer = CustomTrainer(
             model=model,
@@ -234,13 +249,14 @@ class Model():
         set_sdoh(self.Sdoh_name)
         results = trainer.evaluate()
 
-        results.cm.plot()
-        plt.show()
+        cm = results.get('eval_cm')
+        roc_curve = results.get('eval_roc')
+        classification_report = results.get('eval_classification_report')
+        threshold = results.get('eval_threshold')
 
-        results.roc.plot()
-        plt.show()
+        print('Best Threshold', threshold)
 
-        print("Classification Report:", results.classification_report)
+        print("Classification Report:", classification_report)
         # print("Evaluation Results:", results)
 
          # Save evaluation results to a CSV file
@@ -254,3 +270,5 @@ class Model():
         tmp_dir = os.path.join(os.getcwd(), 'tmp_trainer')
         if os.path.exists(tmp_dir):
             shutil.rmtree(tmp_dir)
+        
+        plt.show()
