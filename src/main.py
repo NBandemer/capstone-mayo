@@ -72,9 +72,11 @@ if args.split:
 
 # for sdoh in sdoh_list:
     # num_labels = sdoh_list[sdoh]
-    
+if config.output:
+    config.output = Path(config.output)
+
 # If not data split mode, then train or test mode, so initiate model
-model = Model(config.sdoh, sdoh_to_labels[config.sdoh], config.model, int(config.epochs), int(config.batch), project_base_path, bool(config.balanced), bool(config.weighted))
+model = Model(config.sdoh, sdoh_to_labels[config.sdoh], config.model, int(config.epochs), int(config.batch), project_base_path, bool(config.balanced), bool(config.weighted), output_dir=config.output)
 
 if args.eval: #evaluation mode
     model.test()

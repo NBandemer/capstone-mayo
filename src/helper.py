@@ -1,3 +1,4 @@
+from sklearn import metrics
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, roc_curve
 from sklearn.metrics import ConfusionMatrixDisplay, RocCurveDisplay
 from sklearn.metrics import classification_report, confusion_matrix
@@ -113,16 +114,25 @@ def compute_metrics(eval_pred, test=True):
     preds_probs_tensor = F.softmax(logits_tensor, dim=-1)  # Apply softmax along the last dimension
     preds_probs = preds_probs_tensor.numpy()  # Convert probabilities back to numpy array
 
-    print("==================================Predications here=========================================")
-    print(preds_probs_tensor)
+    # print("==================================Predications here=========================================")
+    # print(preds_probs_tensor)
     preds = np.argmax(preds_probs, axis=-1)
+    num_classes = preds_probs.shape[1]
 
+    # Classifier Metrics based on the predictions
     precision = precision_score(labels, preds, average='weighted')
     recall = recall_score(labels, preds, average='weighted')
     f1 = f1_score(labels, preds, average='weighted')
     acc = accuracy_score(labels, preds)
     report = classification_report(labels, preds, output_dict=True)
-    auc = roc_auc_score(labels, preds, average='weighted', multi_class='ovr')
+
+    # Metrics based on predicted probabilities
+    # Multi class AUC score 
+    if num_classes > 2:
+        auc = roc_auc_score(labels, preds_probs, average='weighted', multi_class='ovr')
+    else:
+        greater_class_prob = preds_probs[:, 1]
+        auc = roc_auc_score(labels, greater_class_prob, average='weighted', multi_class='ovr')
     
     if test:
         # Confusion Matrix
@@ -141,10 +151,20 @@ def compute_metrics(eval_pred, test=True):
             del report[str(key)]
         
         # ROC Curve
+        # Handle multi class ROC curves using OvR
+        curves = []
+        if num_classes > 2:
+            for i in range(num_classes):
+                fpr, tpr, thresholds = roc_curve(labels, preds_probs[:, i], pos_label=i)
+                display = metrics.RocCurveDisplay(fpr=fpr, tpr=tpr, roc_auc=auc, estimator_name=f'{current_sbdh}_{current_sbdh_dict[i]}')
+                best_threshold = thresholds[np.argmax(tpr - fpr)]
+                curves.append((display, best_threshold))
+        else:
+            fpr, tpr, thresholds = roc_curve(labels, greater_class_prob, pos_label=1)
+            display = metrics.RocCurveDisplay(fpr=fpr, tpr=tpr, roc_auc=auc, estimator_name='Estimator')
+            best_threshold = thresholds[np.argmax(tpr - fpr)]
+            curves.append((display, best_threshold))
         
-        fpr, tpr, thresholds = roc_curve(labels, preds)
-        best_threshold = thresholds[np.argmax(tpr - fpr)]
-        roc = RocCurveDisplay.from_predictions(labels, preds)
 
     return {
         'accuracy': acc,
@@ -153,9 +173,8 @@ def compute_metrics(eval_pred, test=True):
         'recall': recall,
         'auc': auc,
         'classification_report': report,
-        'roc': roc,
+        'roc': curves,
         'cm': cm,
-        'threshold': best_threshold
     }
 
 

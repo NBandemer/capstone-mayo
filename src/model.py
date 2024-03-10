@@ -59,7 +59,7 @@ class CustomTrainer(Trainer):
         return (loss, outputs) if return_outputs else loss
 
 class Model():
-    def __init__(self, Sdoh_name, num_of_labels, model_name, epochs, batch, project_base_path, balanced, weighted):
+    def __init__(self, Sdoh_name, num_of_labels, model_name, epochs, batch, project_base_path, balanced, weighted, output_dir=None):
         """
         Initialize the tokenizer and model for the class to use
         """
@@ -81,6 +81,7 @@ class Model():
         self.project_base_path = project_base_path
         self.balanced = balanced
         self.weighted = weighted
+        self.output_dir = output_dir
 
     def train(self):
         if self.balanced and self.weighted:
@@ -94,14 +95,18 @@ class Model():
         x = df['text']
         y = df[self.Sdoh_name]
 
+        # Training constants
         MAX_LENGTH = 128 
         early_stopping = EarlyStoppingCallback(early_stopping_patience=3)
         optimizer = AdamW(self.model.parameters(), lr=5e-5)
+
         if self.weighted:
             self.weights = get_class_weights(y)
 
         # Implement 5-fold stratified cross val
         skf = StratifiedKFold(n_splits=5, random_state=42, shuffle=True)
+        current_fold = 1
+
         for train, test in skf.split(x, y):
             X_train, X_val = x.iloc[train], x.iloc[test]
             y_train, y_val = y.iloc[train], y.iloc[test]
@@ -146,10 +151,12 @@ class Model():
 
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-            tensor_logs = os.path.join(self.project_base_path, f'logs/{self.Sdoh_name}/tensor_logs/logs_{timestamp}')
+            log_dir = self.project_base_path if self.output_dir is None else self.output_dir
+
+            tensor_logs = os.path.join(log_dir, f'logs/{self.Sdoh_name}/tensor_logs/logs_{timestamp}')
             os.makedirs(tensor_logs, exist_ok=True)
 
-            epoch_logs = os.path.join(self.project_base_path, f'logs/{self.Sdoh_name}/epoch_logs/logs_{timestamp}')
+            epoch_logs = os.path.join(log_dir, f'logs/{self.Sdoh_name}/epoch_logs/logs_{timestamp}')
             os.makedirs(epoch_logs, exist_ok=True)
 
             training_args = TrainingArguments(
@@ -177,8 +184,10 @@ class Model():
                 optimizers=optimizers,
             )
 
+            print('Training fold:', current_fold)
             trainer.train()
 
+            current_fold += 1
         # for epoch in range(3):
         #     for batch in train_loader:
         #         optim.zero_grad()
@@ -191,6 +200,8 @@ class Model():
         #         optim.step()
 
         print("Training complete")
+
+        print(self.model)
 
         graph_path = os.path.join(self.project_base_path, f'graphs')
         os.makedirs(graph_path, exist_ok=True)
@@ -234,9 +245,9 @@ class Model():
             saved_model += '_weighted'
         
         model =  AutoModelForSequenceClassification.from_pretrained(saved_model)
-        pipe = TextClassificationPipeline(model=model, tokenizer=self.tokenizer, return_all_scores=True)
-        print(pipe(eval_inputs[0]))
-        print(pipe(eval_inputs[5]))
+        # pipe = TextClassificationPipeline(model=model, tokenizer=self.tokenizer, return_all_scores=True)
+        # print(pipe(eval_inputs[0]))
+        # print(pipe(eval_inputs[5]))
 
         trainer = CustomTrainer(
             model=model,
@@ -249,7 +260,14 @@ class Model():
         results = trainer.evaluate()
 
         cm = results.get('eval_cm')
-        roc_curve = results.get('eval_roc')
+        cm.plot()
+
+        curves = results.get('eval_roc')
+
+        for curve in curves:
+            best_threshold = curve[1]
+            curve[0].plot()
+        
         classification_report = results.get('eval_classification_report')
         threshold = results.get('eval_threshold')
 
@@ -269,5 +287,4 @@ class Model():
         tmp_dir = os.path.join(os.getcwd(), 'tmp_trainer')
         if os.path.exists(tmp_dir):
             shutil.rmtree(tmp_dir)
-        
         plt.show()
