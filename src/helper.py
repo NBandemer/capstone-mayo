@@ -1,4 +1,3 @@
-import numpy as np
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, roc_curve
 from sklearn.metrics import ConfusionMatrixDisplay, RocCurveDisplay
 from sklearn.metrics import classification_report, confusion_matrix
@@ -9,8 +8,11 @@ from tensorboard.backend.event_processing import event_accumulator
 import matplotlib.pyplot as plt
 
 import os
-import pandas as pd
 import torch
+import torch.nn.functional as F
+
+import pandas as pd
+import numpy as np
 
 current_sbdh = "sdoh_education"
 
@@ -101,13 +103,20 @@ def test_train_split(base_path, data):
         pd.DataFrame({"text": X_train, category: y_train}).to_csv(f"{category_data_path}/train.csv", index=False)
         pd.DataFrame({"text": X_val, category: y_val}).to_csv(f"{category_data_path}/test.csv", index=False)
 
-
 def compute_metrics(eval_pred, test=True):
     """
     Calculates the metrics at the end of each epoch
     """
     labels = eval_pred.label_ids
-    preds = eval_pred.predictions.argmax(-1)
+    logits = eval_pred.predictions
+    logits_tensor = torch.tensor(logits)  # Convert logits to PyTorch tensor
+    preds_probs_tensor = F.softmax(logits_tensor, dim=-1)  # Apply softmax along the last dimension
+    preds_probs = preds_probs_tensor.numpy()  # Convert probabilities back to numpy array
+
+    print("==================================Predications here=========================================")
+    print(preds_probs_tensor)
+    preds = np.argmax(preds_probs, axis=-1)
+
     precision = precision_score(labels, preds, average='weighted')
     recall = recall_score(labels, preds, average='weighted')
     f1 = f1_score(labels, preds, average='weighted')

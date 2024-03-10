@@ -98,7 +98,7 @@ class Model():
         early_stopping = EarlyStoppingCallback(early_stopping_patience=3)
         optimizer = AdamW(self.model.parameters(), lr=5e-5)
         if self.weighted:
-            self.weights = get_class_weights(list_train_y)
+            self.weights = get_class_weights(y)
 
         # Implement 5-fold stratified cross val
         skf = StratifiedKFold(n_splits=5, random_state=42, shuffle=True)
@@ -122,13 +122,12 @@ class Model():
                 # Convert back to lists if needed
                 list_train_x = balanced_train['X'].tolist()
                 list_train_y = balanced_train['y'].tolist()
-                list_val_x = X_val.tolist()
-                list_val_y = y_val.tolist()
             else:
                 list_train_x = X_train.tolist()
                 list_train_y = y_train.tolist()
-                list_val_x = X_val.tolist()
-                list_val_y = y_val.tolist()
+
+            list_val_x = X_val.tolist()
+            list_val_y = y_val.tolist()
 
 
             # Truncate and tokenize your input data
