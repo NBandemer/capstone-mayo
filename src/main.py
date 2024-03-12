@@ -76,7 +76,7 @@ if config.output:
     config.output = Path(config.output)
 
 # If not data split mode, then train or test mode, so initiate model
-model = Model(config.sdoh, sdoh_to_labels[config.sdoh], config.model, int(config.epochs), int(config.batch), project_base_path, bool(config.balanced), bool(config.weighted), output_dir=config.output)
+model = Model(config.sdoh, sdoh_to_labels[config.sdoh], config.model, int(config.epochs), int(config.batch), project_base_path, bool(config.balanced), bool(config.weighted), output_dir=config.output, cv=bool(config.cv))
 
 if args.eval: #evaluation mode
     model.test()

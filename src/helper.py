@@ -8,6 +8,8 @@ from sklearn.utils import compute_class_weight, resample
 from tensorboard.backend.event_processing import event_accumulator
 import matplotlib.pyplot as plt
 
+plt.ioff()
+
 import os
 import torch
 import torch.nn.functional as F
@@ -38,7 +40,7 @@ sbdh_community_ed = {
     1: 'True',
 }
 
-def set_sdoh(sdoh_name):
+def set_helper_sdoh(sdoh_name):
     """
     This function sets the SDOH described in the classification report
     """
@@ -124,7 +126,17 @@ def compute_metrics(eval_pred, test=True):
     recall = recall_score(labels, preds, average='weighted')
     f1 = f1_score(labels, preds, average='weighted')
     acc = accuracy_score(labels, preds)
-    report = classification_report(labels, preds, output_dict=True)
+
+    # Classification Report
+    if current_sbdh.startswith("behavior"):
+        current_sbdh_dict = sbdh_substance
+    elif current_sbdh == "sdoh_economics" or current_sbdh == "sdoh_environment":
+        current_sbdh_dict = sbdh_econ_env
+    else:
+        current_sbdh_dict = sbdh_community_ed
+
+    report = classification_report(labels, preds, target_names=current_sbdh_dict.values(), output_dict=True)
+    report_df = pd.DataFrame(report).transpose()
 
     # Metrics based on predicted probabilities
     # Multi class AUC score 
@@ -137,18 +149,6 @@ def compute_metrics(eval_pred, test=True):
     if test:
         # Confusion Matrix
         cm = ConfusionMatrixDisplay.from_predictions(labels, preds)
-
-        # Classification Report
-        if current_sbdh.startswith("behavior"):
-            current_sbdh_dict = sbdh_substance
-        elif current_sbdh == "sdoh_economics" or current_sbdh == "sdoh_environment":
-            current_sbdh_dict = sbdh_econ_env
-        else:
-            current_sbdh_dict = sbdh_community_ed
-        
-        for key, value in current_sbdh_dict.items():
-            report[f'{key}_{value}'] = report[str(key)]
-            del report[str(key)]
         
         # ROC Curve
         # Handle multi class ROC curves using OvR
@@ -172,7 +172,7 @@ def compute_metrics(eval_pred, test=True):
         'precision': precision,
         'recall': recall,
         'auc': auc,
-        'classification_report': report,
+        'classification_report': report_df,
         'roc': curves,
         'cm': cm,
     }

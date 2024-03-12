@@ -59,7 +59,7 @@ class CustomTrainer(Trainer):
         return (loss, outputs) if return_outputs else loss
 
 class Model():
-    def __init__(self, Sdoh_name, num_of_labels, model_name, epochs, batch, project_base_path, balanced, weighted, output_dir=None):
+    def __init__(self, Sdoh_name, num_of_labels, model_name, epochs, batch, project_base_path, balanced, weighted, output_dir=None, cv=None):
         """
         Initialize the tokenizer and model for the class to use
         """
@@ -82,6 +82,7 @@ class Model():
         self.balanced = balanced
         self.weighted = weighted
         self.output_dir = output_dir
+        self.cv = cv
 
     def train(self):
         if self.balanced and self.weighted:
@@ -99,15 +100,25 @@ class Model():
         MAX_LENGTH = 128 
         early_stopping = EarlyStoppingCallback(early_stopping_patience=3)
         optimizer = AdamW(self.model.parameters(), lr=5e-5)
+        current_fold = 1
 
         if self.weighted:
             self.weights = get_class_weights(y)
 
-        # Implement 5-fold stratified cross val
-        skf = StratifiedKFold(n_splits=5, random_state=42, shuffle=True)
-        current_fold = 1
+        if self.cv:
+            # Implement 5-fold stratified cross val
+            skf = StratifiedKFold(n_splits=5, random_state=42, shuffle=True)
+            split_iterator = skf.split(x, y)
+        
+        else:
+            X_train, X_val, y_train, y_val = train_test_split(x, y, test_size=0.2, random_state=42, stratify=y)
+            max_index = len(df) - 1  # Get the maximum valid index of the dataframe
+            split_iterator = [(list(X_train.index[X_train.index <= max_index]), list(X_val.index[X_val.index <= max_index]))]
 
-        for train, test in skf.split(x, y):
+        for train, test in split_iterator:
+            X_train = x.iloc[train]
+            X_val = x.iloc[test]
+
             X_train, X_val = x.iloc[train], x.iloc[test]
             y_train, y_val = y.iloc[train], y.iloc[test]
             epoch_training_steps = len(X_train) // self.batch
@@ -115,9 +126,6 @@ class Model():
             num_warmup_steps = epoch_training_steps * 0.1
             scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
             optimizers = (optimizer, scheduler)
-
-        # Select 20% of training data for validation
-        # X_train, X_val, y_train, y_val = train_test_split(x, y, test_size=0.2, random_state=42, stratify=y)
 
             # Handle class imbalance in training data
             if self.balanced:
@@ -133,7 +141,6 @@ class Model():
 
             list_val_x = X_val.tolist()
             list_val_y = y_val.tolist()
-
 
             # Truncate and tokenize your input data
             train_encodings = self.tokenizer(list_train_x, truncation=True, padding='max_length', max_length=MAX_LENGTH, return_tensors='pt')
@@ -172,8 +179,6 @@ class Model():
                 metric_for_best_model='eval_loss'
             )
         
-            print('Training steps per epoch:',epoch_training_steps)
-
             trainer = CustomTrainer(
                 model=self.model,
                 args=training_args,
@@ -184,107 +189,118 @@ class Model():
                 optimizers=optimizers,
             )
 
-            print('Training fold:', current_fold)
+            print(f'Starting Training{" Fold " + str(current_fold) if self.cv else ""}')
+
             trainer.train()
 
+            print(f'Finished Training{" Fold " + str(current_fold) if self.cv else ""}')
+            
+            graph_dir = os.path.join(self.project_base_path, f'graphs/{self.Sdoh_name}')
+            save_dir = os.path.join(self.project_base_path, f'saved_models/{self.Sdoh_name}')
+
+            # Configure directory paths depending on config
+            if self.cv:
+                graph_dir += f'_cv{current_fold}'
+                save_dir += f'_cv{current_fold}'
+            if self.balanced:
+                graph_dir += '_balanced'
+                save_dir += '_balanced'
+            if self.weighted:
+                graph_dir += '_weighted'
+                save_dir += '_weighted'
+
+            # Create directories
+            os.makedirs(graph_dir, exist_ok=True)
+            os.makedirs(save_dir, exist_ok=True)
+
+            # Plot and save
+            plot_metric_from_tensor(tensor_logs, f'{graph_dir}/plot_loss.jpg')
+            self.model.save_pretrained(save_dir)
+            self.tokenizer.save_pretrained(save_dir)
+
             current_fold += 1
-        # for epoch in range(3):
-        #     for batch in train_loader:
-        #         optim.zero_grad()
-        #         input_ids = batch['input_ids'].to(self.device)
-        #         attention_mask = batch['attention_mask'].to(self.device)
-        #         labels = batch['labels'].to(self.device)
-        #         outputs = self.model(input_ids, attention_mask=attention_mask, labels=labels)
-        #         loss = outputs[0]
-        #         loss.backward()
-        #         optim.step()
-
-        print("Training complete")
-
-        print(self.model)
-
-        graph_path = os.path.join(self.project_base_path, f'graphs')
-        os.makedirs(graph_path, exist_ok=True)
-
-        plot_metric_from_tensor(tensor_logs, f'{graph_path}/{self.Sdoh_name}_metrics_plot.jpg')
-
-        # Saving the model
-        save_dir = f'saved_models/{self.Sdoh_name}'
-        save_dir += '_balanced' if self.balanced else '_weighted' if self.weighted else ''
-
-        save_directory = os.path.join(self.project_base_path, save_dir)
-        os.makedirs(save_directory, exist_ok=True)
-        self.model.save_pretrained(save_directory)
-        self.tokenizer.save_pretrained(save_directory)
 
     def test(self):
+        set_helper_sdoh(self.Sdoh_name)
+        
         data_path = os.path.join(self.project_base_path, f"data/test_train_split/{self.Sdoh_name}")
         
         data_file = 'test.csv'
-        df = pd.read_csv(os.path.join(data_path, data_file))
+        test_df = pd.read_csv(os.path.join(data_path, data_file))
 
-        df.dropna(subset=['text'], inplace=True)
-        eval_inputs = df['text'].tolist()
-        eval_labels = df[self.Sdoh_name].tolist()
+        test_df.dropna(subset=['text'], inplace=True)
+        test_inputs = test_df['text'].tolist()
+        test_labels = test_df[self.Sdoh_name].tolist()
         
         max_seq_length = 128
 
-        eval_encodings = self.tokenizer(eval_inputs, truncation=True, padding='max_length', max_length=max_seq_length, return_tensors='pt')
+        test_encodings = self.tokenizer(test_inputs, truncation=True, padding='max_length', max_length=max_seq_length, return_tensors='pt')
 
-        eval_dataset = MIMICDataset(
-            eval_encodings,
-            eval_labels
+        test_dataset = MIMICDataset(
+            test_encodings,
+            test_labels
         )
 
-        saved_model = os.path.join(self.project_base_path, f'saved_models/{self.Sdoh_name}')
+        saved_models_dir = os.path.join(self.project_base_path, f'saved_models/')
+        sdoh_dir = f'{self.Sdoh_name}'
 
+        if self.cv:
+            sdoh_dir += f'_cv5'
         if self.balanced:
-            saved_model += '_balanced'
+            sdoh_dir += '_balanced'
         if self.weighted:
-            self.weights = get_class_weights(eval_labels)
-            saved_model += '_weighted'
+            sdoh_dir += '_weighted'
         
-        model =  AutoModelForSequenceClassification.from_pretrained(saved_model)
-        # pipe = TextClassificationPipeline(model=model, tokenizer=self.tokenizer, return_all_scores=True)
-        # print(pipe(eval_inputs[0]))
-        # print(pipe(eval_inputs[5]))
-
-        trainer = CustomTrainer(
+        results_dir = os.path.join(self.project_base_path, f'test_results/{sdoh_dir}')
+        os.makedirs(results_dir, exist_ok=True)
+        
+        model =  AutoModelForSequenceClassification.from_pretrained(os.path.join(saved_models_dir, sdoh_dir))
+        
+        eval_trainer = CustomTrainer(
             model=model,
             test=True,
-            eval_dataset=eval_dataset,
+            eval_dataset=test_dataset,
             compute_metrics=compute_metrics
         )
 
-        set_sdoh(self.Sdoh_name)
-        results = trainer.evaluate()
+        results = eval_trainer.evaluate()
 
         cm = results.get('eval_cm')
+
         cm.plot()
-
-        curves = results.get('eval_roc')
-
-        for curve in curves:
-            best_threshold = curve[1]
-            curve[0].plot()
+        plt.savefig(f"{results_dir}/confusion_matrix.jpg")
         
-        classification_report = results.get('eval_classification_report')
-        threshold = results.get('eval_threshold')
+        curves = results.get('eval_roc')
+        roc_dir = os.path.join(results_dir, 'roc')
+        os.makedirs(roc_dir, exist_ok=True)
 
-        print('Best Threshold', threshold)
-
-        print("Classification Report:", classification_report)
-        # print("Evaluation Results:", results)
+        for display, best_threshold in curves:
+            # Plot the ROC curve
+            display.plot()
+            
+            # Set titles and labels
+            plt.title(f'ROC Curve for {display.estimator_name}')
+            plt.xlabel('False Positive Rate')
+            plt.ylabel('True Positive Rate')
+            
+            # Add annotation for the best threshold
+            plt.text(0.5, 0.5, f'Best Threshold: {best_threshold:.2f}', ha='center', va='center', fontsize=10, bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5'))
+            
+            # Save the figure as JPG with the estimator name
+            plt.savefig(f'{roc_dir}/{display.estimator_name}.jpg')
+        
+        report_df = results.get('eval_classification_report')
+        report_df.to_csv(f"{results_dir}/classification_report.csv")
 
          # Save evaluation results to a CSV file
-        results_df = pd.DataFrame([results])
-        results_path = os.path.join(self.project_base_path, f'test_results/{self.Sdoh_name}')
-        os.makedirs(results_path, exist_ok=True)
-        results_df.to_csv(f"{results_path}/results.csv", index=False)
-        print("Evaluation results saved to:", results_path)
+        results_df = pd.DataFrame([results]).drop(columns=['eval_cm', 'eval_roc', 'eval_classification_report'])
+        os.makedirs(results_dir, exist_ok=True)
+        results_df.to_csv(f"{results_dir}/results.csv", index=False)
+        print("Evaluation results saved to:", results_dir)
 
         # Clean up temp files
         tmp_dir = os.path.join(os.getcwd(), 'tmp_trainer')
         if os.path.exists(tmp_dir):
             shutil.rmtree(tmp_dir)
-        plt.show()
+
+        # plt.show()
