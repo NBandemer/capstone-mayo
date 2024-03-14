@@ -1,7 +1,7 @@
 import numpy as np
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, TextClassificationPipeline
 from transformers import TrainingArguments, Trainer
-from transformers import AdamW, get_linear_schedule_with_warmup
+from transformers import AdamW, get_cosine_schedule_with_warmup
 from transformers import EarlyStoppingCallback
 
 import torch
@@ -40,13 +40,14 @@ class MIMICDataset(Dataset):
 class CustomTrainer(Trainer):
     def __init__(self, *args, **kwargs):
         self.test = kwargs.pop('test', False)
+        self.cv = kwargs.pop('cv', False)
         super().__init__(*args, **kwargs)
 
     def compute_metrics(self, eval_pred):
         """
         This function computes the metrics for the given model and inputs
         """
-        compute_metrics(eval_pred, self.test)
+        compute_metrics(eval_pred, self.cv, self.test)
 
     def compute_loss(self, model, inputs, return_outputs=False):
         """
@@ -68,12 +69,11 @@ class Model():
 
         # Initialize tokenizer and model
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, do_lower_case=True)
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=num_of_labels)
 
         # Initialize device
         self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-        self.model.to(self.device)
 
+        self.model_name = model_name
         self.Sdoh_name = Sdoh_name
         self.num_of_labels = num_of_labels
         self.epochs = epochs
@@ -84,11 +84,10 @@ class Model():
         self.output_dir = output_dir
         self.cv = cv
 
-    def train(self):
-        if self.balanced and self.weighted:
-            print("Both balanced and weighted flags are set, please set only one of them")
-            exit(1)
-
+    def get_training_data(self):
+        """
+        This function gets the training data for the given SDoH
+        """
         data_path = os.path.join(self.project_base_path, f"data/test_train_split/{self.Sdoh_name}/")
         data_file = 'train.csv'
         df = pd.read_csv(os.path.join(data_path, data_file))
@@ -96,10 +95,18 @@ class Model():
         x = df['text']
         y = df[self.Sdoh_name]
 
+        return x, y
+
+    def train(self):
+        if self.balanced and self.weighted:
+            print("Both balanced and weighted flags are set, please set only one of them")
+            exit(1)
+
+        x,y = self.get_training_data()
+
         # Training constants
         MAX_LENGTH = 128 
         early_stopping = EarlyStoppingCallback(early_stopping_patience=3)
-        optimizer = AdamW(self.model.parameters(), lr=5e-5)
         current_fold = 1
 
         if self.weighted:
@@ -112,19 +119,29 @@ class Model():
         
         else:
             X_train, X_val, y_train, y_val = train_test_split(x, y, test_size=0.2, random_state=42, stratify=y)
-            max_index = len(df) - 1  # Get the maximum valid index of the dataframe
+            max_index = len(x) - 1  # Get the maximum valid index of the dataframe
             split_iterator = [(list(X_train.index[X_train.index <= max_index]), list(X_val.index[X_val.index <= max_index]))]
 
+        cross_val_accuracies = []
+        cross_val_f1s = []
+        cross_val_aucs = []
+        cross_val_losses = []
+
         for train, test in split_iterator:
-            X_train = x.iloc[train]
-            X_val = x.iloc[test]
+            model = AutoModelForSequenceClassification.from_pretrained(self.model_name, num_labels=self.num_of_labels)
+            model.to(self.device)
+            optimizer = AdamW(model.parameters(), lr=5e-5, weight_decay=1e-5)
+
 
             X_train, X_val = x.iloc[train], x.iloc[test]
             y_train, y_val = y.iloc[train], y.iloc[test]
+
             epoch_training_steps = len(X_train) // self.batch
             num_training_steps = epoch_training_steps * self.epochs
             num_warmup_steps = epoch_training_steps * 0.1
-            scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
+            scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
+
+            # scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
             optimizers = (optimizer, scheduler)
 
             # Handle class imbalance in training data
@@ -173,19 +190,20 @@ class Model():
                 num_train_epochs=self.epochs,
                 per_device_train_batch_size=self.batch,  
                 per_device_eval_batch_size=self.batch,
-                weight_decay=1e-5,
                 evaluation_strategy="epoch",
                 load_best_model_at_end=True,
-                metric_for_best_model='eval_loss'
+                metric_for_best_model='eval_f1'
             )
         
             trainer = CustomTrainer(
-                model=self.model,
+                model=model,
                 args=training_args,
                 train_dataset=train_dataset,
                 eval_dataset=val_dataset,
                 callbacks=[early_stopping],
+                compute_metrics=compute_metrics_train,
                 test=False,
+                cv=self.cv,
                 optimizers=optimizers,
             )
 
@@ -194,6 +212,20 @@ class Model():
             trainer.train()
 
             print(f'Finished Training{" Fold " + str(current_fold) if self.cv else ""}')
+
+            # If cross val, run evaluation on the model
+
+            if self.cv:
+                results = trainer.evaluate()
+                accuracy = results.get('eval_accuracy')
+                f1 = results.get('eval_f1')
+                auc = results.get('eval_auc')
+                loss = results.get('eval_loss')
+                cross_val_accuracies.append(accuracy)
+                cross_val_f1s.append(f1)
+                cross_val_aucs.append(auc)
+                cross_val_losses.append(loss)
+
             
             graph_dir = os.path.join(self.project_base_path, f'graphs/{self.Sdoh_name}')
             save_dir = os.path.join(self.project_base_path, f'saved_models/{self.Sdoh_name}')
@@ -215,10 +247,24 @@ class Model():
 
             # Plot and save
             plot_metric_from_tensor(tensor_logs, f'{graph_dir}/plot_loss.jpg')
-            self.model.save_pretrained(save_dir)
-            self.tokenizer.save_pretrained(save_dir)
+
+            # Cross validation is not meant to generate a final model, its just for metrics so dont save
+            if not self.cv:
+                model.save_pretrained(save_dir)
+                self.tokenizer.save_pretrained(save_dir)
 
             current_fold += 1
+
+        if self.cv:
+            print(f'Cross Validation Results for {self.Sdoh_name}')
+            print(f'Accuracies: {cross_val_accuracies}')
+            print(f'F1 Scores: {cross_val_f1s}')           
+            print(f'AUCs: {cross_val_aucs}')  
+            print(f'Losses: {cross_val_losses}')              
+            print(f'Average Accuracy: {np.mean(cross_val_accuracies)}')
+            print(f'Average F1: {np.mean(cross_val_f1s)}')
+            print(f'Average AUC: {np.mean(cross_val_aucs)}')
+            print(f'Average Loss: {np.mean(cross_val_losses)}')
 
     def test(self):
         set_helper_sdoh(self.Sdoh_name)
@@ -284,7 +330,7 @@ class Model():
             plt.ylabel('True Positive Rate')
             
             # Add annotation for the best threshold
-            plt.text(0.5, 0.5, f'Best Threshold: {best_threshold:.2f}', ha='center', va='center', fontsize=10, bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5'))
+            plt.text(0.5, 0.5, f'Best Threshold: {best_threshold:.4f}', ha='center', va='center', fontsize=10, bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5'))
             
             # Save the figure as JPG with the estimator name
             plt.savefig(f'{roc_dir}/{display.estimator_name}.jpg')

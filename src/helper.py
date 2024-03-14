@@ -106,7 +106,39 @@ def test_train_split(base_path, data):
         pd.DataFrame({"text": X_train, category: y_train}).to_csv(f"{category_data_path}/train.csv", index=False)
         pd.DataFrame({"text": X_val, category: y_val}).to_csv(f"{category_data_path}/test.csv", index=False)
 
-def compute_metrics(eval_pred, test=True):
+def compute_metrics_train(eval_pred):
+    labels = eval_pred.label_ids
+    logits = eval_pred.predictions
+    logits_tensor = torch.tensor(logits)  # Convert logits to PyTorch tensor
+    preds_probs_tensor = F.softmax(logits_tensor, dim=-1)  # Apply softmax along the last dimension
+    preds_probs = preds_probs_tensor.numpy()  # Convert probabilities back to numpy array
+
+    preds = np.argmax(preds_probs, axis=-1)
+    num_classes = preds_probs.shape[1]
+
+    # Classifier Metrics based on the predictions
+    precision = precision_score(labels, preds, average='weighted')
+    recall = recall_score(labels, preds, average='weighted')
+    f1 = f1_score(labels, preds, average='weighted')
+    acc = accuracy_score(labels, preds)
+
+    # Metrics based on predicted probabilities
+    # Multi class AUC score 
+    if num_classes > 2:
+        auc = roc_auc_score(labels, preds_probs, average='weighted', multi_class='ovr')
+    else:
+        greater_class_prob = preds_probs[:, 1]
+        auc = roc_auc_score(labels, greater_class_prob, average='weighted', multi_class='ovr')
+    
+    return {
+        'accuracy': acc,
+        'f1': f1,
+        'precision': precision,
+        'recall': recall,
+        'auc': auc,
+    }
+
+def compute_metrics(eval_pred, cv=False, test=True):
     """
     Calculates the metrics at the end of each epoch
     """
@@ -165,7 +197,12 @@ def compute_metrics(eval_pred, test=True):
             best_threshold = thresholds[np.argmax(tpr - fpr)]
             curves.append((display, best_threshold))
         
-
+    if cv:
+        return {
+            'accuracy': acc,
+            'f1': f1,
+            'auc': auc,
+        }
     return {
         'accuracy': acc,
         'f1': f1,

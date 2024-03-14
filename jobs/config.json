@@ -1,11 +1,11 @@
 {
-    "model": "emilyalsentzer/Bio_ClinicalBERT",
-    "sdoh": "behavior_alcohol",
+    "model": "emilyalsentzer/Bio_Discharge_Summary_BERT", 
+    "sdoh": "sdoh_community_present",
     "data": "../data/PREPROCESSED-NOTES-NEW.csv",
     "batch": 32,
-    "epochs": 20,
+    "epochs": 50,
     "balanced": false,
-    "weighted": true,
+    "weighted": false,
     "output": "E:/",
-    "cv": true
+    "cv": false
 }
