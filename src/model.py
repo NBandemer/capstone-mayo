@@ -106,7 +106,7 @@ class Model():
 
         # Training constants
         MAX_LENGTH = 128 
-        early_stopping = EarlyStoppingCallback(early_stopping_patience=3)
+        early_stopping = EarlyStoppingCallback(early_stopping_patience=2)
         current_fold = 1
 
         if self.weighted:
@@ -131,7 +131,6 @@ class Model():
             model = AutoModelForSequenceClassification.from_pretrained(self.model_name, num_labels=self.num_of_labels)
             model.to(self.device)
             optimizer = AdamW(model.parameters(), lr=5e-5, weight_decay=1e-5)
-
 
             X_train, X_val = x.iloc[train], x.iloc[test]
             y_train, y_val = y.iloc[train], y.iloc[test]
@@ -267,6 +266,10 @@ class Model():
             print(f'Average Loss: {np.mean(cross_val_losses)}')
 
     def test(self):
+        if self.cv:
+            print("Cross validation is not supported in test mode")
+            exit(1)
+
         set_helper_sdoh(self.Sdoh_name)
         
         data_path = os.path.join(self.project_base_path, f"data/test_train_split/{self.Sdoh_name}")
@@ -290,8 +293,6 @@ class Model():
         saved_models_dir = os.path.join(self.project_base_path, f'saved_models/')
         sdoh_dir = f'{self.Sdoh_name}'
 
-        if self.cv:
-            sdoh_dir += f'_cv5'
         if self.balanced:
             sdoh_dir += '_balanced'
         if self.weighted:

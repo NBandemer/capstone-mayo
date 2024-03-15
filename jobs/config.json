@@ -1,11 +1,11 @@
 {
-    "model": "emilyalsentzer/Bio_Discharge_Summary_BERT", 
+    "model": "emilyalsentzer/Bio_ClinicalBERT", 
     "sdoh": "sdoh_community_present",
     "data": "../data/PREPROCESSED-NOTES-NEW.csv",
     "batch": 32,
-    "epochs": 50,
+    "epochs": 5,
     "balanced": false,
-    "weighted": false,
+    "weighted": true,
     "output": "E:/",
-    "cv": false
+    "cv": true
 }
