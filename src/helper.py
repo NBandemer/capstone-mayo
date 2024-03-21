@@ -193,7 +193,7 @@ def compute_metrics(eval_pred, cv=False, test=True):
                 curves.append((display, best_threshold))
         else:
             fpr, tpr, thresholds = roc_curve(labels, greater_class_prob, pos_label=1)
-            display = metrics.RocCurveDisplay(fpr=fpr, tpr=tpr, roc_auc=auc, estimator_name='Estimator')
+            display = metrics.RocCurveDisplay(fpr=fpr, tpr=tpr, roc_auc=auc, estimator_name=current_sbdh)
             best_threshold = thresholds[np.argmax(tpr - fpr)]
             curves.append((display, best_threshold))
         

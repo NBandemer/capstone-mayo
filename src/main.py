@@ -7,8 +7,8 @@ sdoh_to_labels = {
     "sdoh_community_present": 2,
     "sdoh_community_absent": 2,
     "sdoh_education": 2,
-    "sdoh_economics": 2,
-    "sdoh_environment": 2,
+    "sdoh_economics": 3,
+    "sdoh_environment": 3,
     "behavior_alcohol": 5,
     "behavior_tobacco": 5,
     "behavior_drug": 5
@@ -75,10 +75,18 @@ if args.split:
 if config.output:
     config.output = Path(config.output)
 
-# If not data split mode, then train or test mode, so initiate model
+# Train all models
+# for sdoh, labels in sdoh_to_labels:
+    # model.train()
+    
 model = Model(config.sdoh, sdoh_to_labels[config.sdoh], config.model, int(config.epochs), int(config.batch), project_base_path, bool(config.balanced), bool(config.weighted), output_dir=config.output, cv=bool(config.cv))
 
 if args.eval: #evaluation mode
     model.test()
 else:
     model.train()
+
+# Cross Val all models
+# for (sdoh, labels) in sdoh_to_labels.items():
+#     model = Model(sdoh, labels, config.model, int(config.epochs), int(config.batch), project_base_path, bool(config.balanced), bool(config.weighted), output_dir=config.output, cv=True)
+#     model.train()

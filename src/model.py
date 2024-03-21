@@ -226,19 +226,22 @@ class Model():
                 cross_val_losses.append(loss)
 
             
-            graph_dir = os.path.join(self.project_base_path, f'graphs/{self.Sdoh_name}')
-            save_dir = os.path.join(self.project_base_path, f'saved_models/{self.Sdoh_name}')
+            graph_dir = os.path.join(self.project_base_path, f'graphs/')
+            save_dir = os.path.join(self.project_base_path, f'saved_models/')
 
             # Configure directory paths depending on config
             if self.cv:
-                graph_dir += f'_cv{current_fold}'
-                save_dir += f'_cv{current_fold}'
+                graph_dir += f'cv{current_fold}/'
+                save_dir += f'cv{current_fold}/'
             if self.balanced:
-                graph_dir += '_balanced'
-                save_dir += '_balanced'
+                graph_dir += 'balanced/'
+                save_dir += 'balanced/'
             if self.weighted:
-                graph_dir += '_weighted'
-                save_dir += '_weighted'
+                graph_dir += 'weighted/'
+                save_dir += 'weighted/'
+
+            graph_dir += self.Sdoh_name
+            save_dir += self.Sdoh_name
 
             # Create directories
             os.makedirs(graph_dir, exist_ok=True)
@@ -255,15 +258,25 @@ class Model():
             current_fold += 1
 
         if self.cv:
-            print(f'Cross Validation Results for {self.Sdoh_name}')
-            print(f'Accuracies: {cross_val_accuracies}')
-            print(f'F1 Scores: {cross_val_f1s}')           
-            print(f'AUCs: {cross_val_aucs}')  
-            print(f'Losses: {cross_val_losses}')              
-            print(f'Average Accuracy: {np.mean(cross_val_accuracies)}')
-            print(f'Average F1: {np.mean(cross_val_f1s)}')
-            print(f'Average AUC: {np.mean(cross_val_aucs)}')
-            print(f'Average Loss: {np.mean(cross_val_losses)}')
+            df_data = {
+                'accuracy': cross_val_accuracies,
+                'f1': cross_val_f1s,
+                'auc': cross_val_aucs,
+                'loss': cross_val_losses
+            }
+
+            df = pd.DataFrame(df_data)
+            df.to_csv(f'{self.project_base_path}/cv/{self.Sdoh_name}.csv', index=False)
+
+            # print(f'Cross Validation Results for {self.Sdoh_name}')
+            # print(f'Accuracies: {cross_val_accuracies}')
+            # print(f'F1 Scores: {cross_val_f1s}')           
+            # print(f'AUCs: {cross_val_aucs}')  
+            # print(f'Losses: {cross_val_losses}')              
+            # print(f'Average Accuracy: {np.mean(cross_val_accuracies)}')
+            # print(f'Average F1: {np.mean(cross_val_f1s)}')
+            # print(f'Average AUC: {np.mean(cross_val_aucs)}')
+            # print(f'Average Loss: {np.mean(cross_val_losses)}')
 
     def test(self):
         if self.cv:
@@ -291,13 +304,14 @@ class Model():
         )
 
         saved_models_dir = os.path.join(self.project_base_path, f'saved_models/')
-        sdoh_dir = f'{self.Sdoh_name}'
+        sdoh_dir = ''
 
         if self.balanced:
-            sdoh_dir += '_balanced'
+            sdoh_dir += 'balanced/'
         if self.weighted:
-            sdoh_dir += '_weighted'
+            sdoh_dir += 'weighted/'
         
+        sdoh_dir += self.Sdoh_name
         results_dir = os.path.join(self.project_base_path, f'test_results/{sdoh_dir}')
         os.makedirs(results_dir, exist_ok=True)
         
