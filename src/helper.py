@@ -225,6 +225,7 @@ def plot_metric_from_tensor(log_dir, save_dir):
 
     graph1_data = event_acc.Scalars("eval/loss")
     graph2_data = event_acc.Scalars("train/loss")
+    graph3_data = event_acc.Scalars("eval/f1")
 
     # Access step and value directly from events
     steps1 = [event.step for event in graph1_data]
@@ -233,14 +234,27 @@ def plot_metric_from_tensor(log_dir, save_dir):
     steps2 = [event.step for event in graph2_data]
     values2 = [event.value for event in graph2_data]
 
+    steps3 = [event.step for event in graph3_data]
+    values3 = [event.value for event in graph3_data]
+
     plt.figure(figsize=(10, 6))
     plt.plot(steps1, values1, label="Eval Loss")
     plt.plot(steps2, values2, label="Train Loss")
     plt.legend()
     plt.xlabel("Step")
     plt.ylabel("Loss")
-    plt.title("Combined Graphs")
+    plt.title(f"Train/Eval Losses for {current_sbdh}")
+    plt.savefig(f"{save_dir}plot_loss.jpg")
+    plt.close()
     # plt.show()
 
+    plt.figure(figsize=(10, 6))
+    plt.plot(steps3, values3, label="Eval F1")
+    plt.legend()
+    plt.xlabel("Step")
+    plt.ylabel("F1")
+    plt.title(f"Eval F1 for {current_sbdh}")
+
     # Save the graph to the specified folder
-    plt.savefig(f"{save_dir}")
+    plt.savefig(f"{save_dir}eval_f1.jpg")
+    plt.close()

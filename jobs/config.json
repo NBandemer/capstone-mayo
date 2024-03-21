@@ -1,11 +1,11 @@
 {
     "model": "emilyalsentzer/Bio_ClinicalBERT", 
-    "sdoh": "behavior_drug",
+    "sdoh": "sdoh_community_absent",
     "data": "../data/PREPROCESSED-NOTES-NEW.csv",
     "batch": 32,
     "epochs": 15,
     "balanced": false,
-    "weighted": true,
+    "weighted": false,
     "output": "E:/",
-    "cv": true
+    "cv": false
 }

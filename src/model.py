@@ -1,3 +1,4 @@
+import random
 import numpy as np
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, TextClassificationPipeline
 from transformers import TrainingArguments, Trainer
@@ -83,6 +84,12 @@ class Model():
         self.weighted = weighted
         self.output_dir = output_dir
         self.cv = cv
+
+        seed_val = 42
+        random.seed(seed_val)
+        np.random.seed(seed_val)
+        torch.manual_seed(seed_val)
+        torch.cuda.manual_seed_all(seed_val)
 
     def get_training_data(self):
         """
@@ -186,6 +193,7 @@ class Model():
                 output_dir=epoch_logs,
                 logging_dir=tensor_logs,
                 save_strategy='epoch',
+                logging_strategy='epoch',
                 num_train_epochs=self.epochs,
                 per_device_train_batch_size=self.batch,  
                 per_device_eval_batch_size=self.batch,
@@ -230,15 +238,15 @@ class Model():
             save_dir = os.path.join(self.project_base_path, f'saved_models/')
 
             # Configure directory paths depending on config
-            if self.cv:
-                graph_dir += f'cv{current_fold}/'
-                save_dir += f'cv{current_fold}/'
             if self.balanced:
                 graph_dir += 'balanced/'
                 save_dir += 'balanced/'
-            if self.weighted:
+            elif self.weighted:
                 graph_dir += 'weighted/'
                 save_dir += 'weighted/'
+            else:
+                graph_dir += 'standard/'
+                save_dir += 'standard/'
 
             graph_dir += self.Sdoh_name
             save_dir += self.Sdoh_name
@@ -247,11 +255,9 @@ class Model():
             os.makedirs(graph_dir, exist_ok=True)
             os.makedirs(save_dir, exist_ok=True)
 
-            # Plot and save
-            plot_metric_from_tensor(tensor_logs, f'{graph_dir}/plot_loss.jpg')
-
             # Cross validation is not meant to generate a final model, its just for metrics so dont save
             if not self.cv:
+                plot_metric_from_tensor(tensor_logs, f'{graph_dir}/')
                 model.save_pretrained(save_dir)
                 self.tokenizer.save_pretrained(save_dir)
 
@@ -265,8 +271,15 @@ class Model():
                 'loss': cross_val_losses
             }
 
+            cv_path = os.path.join(self.project_base_path, f'test_results/cv/')
+            if self.balanced:
+                cv_path += 'balanced/'
+            elif self.weighted:
+                cv_path += 'weighted/'
+            os.makedirs(cv_path, exist_ok=True)
+            
             df = pd.DataFrame(df_data)
-            df.to_csv(f'{self.project_base_path}/cv/{self.Sdoh_name}.csv', index=False)
+            df.to_csv(f'{cv_path}{self.Sdoh_name}.csv', index=False)
 
             # print(f'Cross Validation Results for {self.Sdoh_name}')
             # print(f'Accuracies: {cross_val_accuracies}')

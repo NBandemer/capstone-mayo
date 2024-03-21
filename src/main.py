@@ -78,15 +78,45 @@ if config.output:
 # Train all models
 # for sdoh, labels in sdoh_to_labels:
     # model.train()
-    
+
 model = Model(config.sdoh, sdoh_to_labels[config.sdoh], config.model, int(config.epochs), int(config.batch), project_base_path, bool(config.balanced), bool(config.weighted), output_dir=config.output, cv=bool(config.cv))
 
 if args.eval: #evaluation mode
     model.test()
-else:
+# else:
+#     print(f'Training model for {config.sdoh}... with balanced: {config.balanced} and weighted: {config.weighted}...')
+#     print('Cross Validation: ', config.cv)
+#     model.train()
+
+# Run all models (normal and weighted)
+for (sdoh, labels) in sdoh_to_labels.items():
+    set_helper_sdoh(sdoh)
+    model = Model(
+        Sdoh_name=sdoh, 
+        num_of_labels=labels, 
+        model_name=config.model, 
+        epochs=int(config.epochs), 
+        batch=int(config.batch), 
+        project_base_path=project_base_path, 
+        balanced=False, 
+        weighted=False, 
+        output_dir=config.output, 
+        cv=False
+    )
     model.train()
 
-# Cross Val all models
-# for (sdoh, labels) in sdoh_to_labels.items():
-#     model = Model(sdoh, labels, config.model, int(config.epochs), int(config.batch), project_base_path, bool(config.balanced), bool(config.weighted), output_dir=config.output, cv=True)
-#     model.train()
+for (sdoh, labels) in sdoh_to_labels.items():
+    set_helper_sdoh(sdoh)
+    model = Model(
+        Sdoh_name=sdoh, 
+        num_of_labels=labels, 
+        model_name=config.model, 
+        epochs=int(config.epochs), 
+        batch=int(config.batch), 
+        project_base_path=project_base_path, 
+        balanced=False, 
+        weighted=True, 
+        output_dir=config.output, 
+        cv=False
+    )
+    model.train()
