@@ -7,5 +7,4 @@ saved_models
 /.vscode
 __pycache__
 data/data-old
-test_results
 .venv
