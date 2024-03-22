@@ -7,6 +7,7 @@ from sklearn.utils import compute_class_weight, resample
 
 from tensorboard.backend.event_processing import event_accumulator
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 
 plt.ioff()
 
@@ -154,6 +155,7 @@ def compute_metrics(eval_pred, cv=False, test=True):
     num_classes = preds_probs.shape[1]
 
     # Classifier Metrics based on the predictions
+    #TODO: Macro?
     precision = precision_score(labels, preds, average='weighted')
     recall = recall_score(labels, preds, average='weighted')
     f1 = f1_score(labels, preds, average='weighted')
@@ -258,3 +260,47 @@ def plot_metric_from_tensor(log_dir, save_dir):
     # Save the graph to the specified folder
     plt.savefig(f"{save_dir}eval_f1.jpg")
     plt.close()
+
+def plot_roc(curves, roc_dir, sdoh_name):
+    fig = plt.figure()
+    
+    # Create a grid for the plots
+    gs = gridspec.GridSpec(2, 1, height_ratios=[8, 1]) 
+
+    # Create the ROC curve plot
+    ax0 = plt.subplot(gs[0])
+    
+    # Set titles and labels
+    ax0.set_title(f'ROC Curve for {sdoh_name}')
+    ax0.set_xlabel('False Positive Rate')
+    ax0.set_ylabel('True Positive Rate')
+
+    for display, best_threshold in curves:
+        # Plot the ROC curve
+        ax0.plot(display.fpr, display.tpr, label=display.estimator_name)
+        
+    ax0.legend(loc='lower right')
+
+    # Prepare data for the table
+    columns = ['Estimator', 'Best Threshold']
+    cell_text = []
+
+    for display, best_threshold in curves:
+        # Add data to the table
+        cell_text.append([display.estimator_name, f'{best_threshold:.4f}'])
+        
+    # Create the table plot
+    ax1 = plt.subplot(gs[1])
+    
+    # Remove axis for the table subplot
+    ax1.axis('off')
+
+    # Add a table at the bottom of the axes
+    ax1.table(cellText=cell_text, colLabels=columns, loc='center')
+
+    # Adjust the spacing between subplots
+    fig.subplots_adjust(hspace=0.5)  # Increase this value to add more space
+
+    plt.savefig(f'{roc_dir}/roc_graph.jpg')
+    plt.close()
+    

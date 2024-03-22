@@ -345,26 +345,29 @@ class Model():
 
         cm.plot()
         plt.savefig(f"{results_dir}/confusion_matrix.jpg")
+        plt.close()
         
         curves = results.get('eval_roc')
         roc_dir = os.path.join(results_dir, 'roc')
         os.makedirs(roc_dir, exist_ok=True)
 
-        for display, best_threshold in curves:
-            # Plot the ROC curve
-            display.plot()
+        # for display, best_threshold in curves:
+        #     # Plot the ROC curve
+        #     display.plot()
             
-            # Set titles and labels
-            plt.title(f'ROC Curve for {display.estimator_name}')
-            plt.xlabel('False Positive Rate')
-            plt.ylabel('True Positive Rate')
+        #     # Set titles and labels
+        #     plt.title(f'ROC Curve for {display.estimator_name}')
+        #     plt.xlabel('False Positive Rate')
+        #     plt.ylabel('True Positive Rate')
             
-            # Add annotation for the best threshold
-            plt.text(0.5, 0.5, f'Best Threshold: {best_threshold:.4f}', ha='center', va='center', fontsize=10, bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5'))
+        #     # Add annotation for the best threshold
+        #     plt.text(0.5, 0.5, f'Best Threshold: {best_threshold:.4f}', ha='center', va='center', fontsize=10, bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5'))
             
-            # Save the figure as JPG with the estimator name
-            plt.savefig(f'{roc_dir}/{display.estimator_name}.jpg')
-        
+        #     # Save the figure as JPG with the estimator name
+        #     plt.savefig(f'{roc_dir}/{display.estimator_name}.jpg')
+
+        plot_roc(curves, roc_dir, self.Sdoh_name)
+
         report_df = results.get('eval_classification_report')
         report_df.to_csv(f"{results_dir}/classification_report.csv")
 
