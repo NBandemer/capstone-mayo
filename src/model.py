@@ -321,9 +321,11 @@ class Model():
 
         if self.balanced:
             sdoh_dir += 'balanced/'
-        if self.weighted:
+        elif self.weighted:
             sdoh_dir += 'weighted/'
-        
+        else:
+            sdoh_dir += 'standard/'
+            
         sdoh_dir += self.Sdoh_name
         results_dir = os.path.join(self.project_base_path, f'test_results/{sdoh_dir}')
         os.makedirs(results_dir, exist_ok=True)
