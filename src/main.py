@@ -103,7 +103,7 @@ for (sdoh, labels) in sdoh_to_labels.items():
         output_dir=config.output, 
         cv=False
     )
-    model.train()
+    model.test()
 
 for (sdoh, labels) in sdoh_to_labels.items():
     set_helper_sdoh(sdoh)
@@ -119,4 +119,4 @@ for (sdoh, labels) in sdoh_to_labels.items():
         output_dir=config.output, 
         cv=False
     )
-    model.train()
+    model.test()
