@@ -42,6 +42,7 @@ class CustomTrainer(Trainer):
     def __init__(self, *args, **kwargs):
         self.test = kwargs.pop('test', False)
         self.cv = kwargs.pop('cv', False)
+        self.weights = kwargs.pop('weights', None).to('cuda') if 'weights' in kwargs else None
         super().__init__(*args, **kwargs)
 
     def compute_metrics(self, eval_pred):
@@ -210,6 +211,7 @@ class Model():
                 callbacks=[early_stopping],
                 compute_metrics=compute_metrics_train,
                 test=False,
+                weights=self.weights if self.weighted else None,
                 cv=self.cv,
                 optimizers=optimizers,
             )

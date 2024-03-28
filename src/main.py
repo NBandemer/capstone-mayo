@@ -2,6 +2,7 @@ from model import *
 import argparse
 from pathlib import Path
 import json
+from helper import *
 
 sdoh_to_labels = {
     "sdoh_community_present": 2,
@@ -13,6 +14,10 @@ sdoh_to_labels = {
     "behavior_tobacco": 5,
     "behavior_drug": 5
 }
+
+if __name__ == '__main__':
+    generate_synthetic_data()
+    exit(0)
 
 project_base_path = Path(__file__).parent.parent.resolve()
 
@@ -99,11 +104,11 @@ for (sdoh, labels) in sdoh_to_labels.items():
         batch=int(config.batch), 
         project_base_path=project_base_path, 
         balanced=False, 
-        weighted=False, 
+        weighted=True, 
         output_dir=config.output, 
         cv=False
     )
-    model.test()
+    model.train()
 
 for (sdoh, labels) in sdoh_to_labels.items():
     set_helper_sdoh(sdoh)
@@ -120,3 +125,4 @@ for (sdoh, labels) in sdoh_to_labels.items():
         cv=False
     )
     model.test()
+
