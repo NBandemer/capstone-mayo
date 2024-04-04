@@ -42,7 +42,9 @@ class CustomTrainer(Trainer):
     def __init__(self, *args, **kwargs):
         self.test = kwargs.pop('test', False)
         self.cv = kwargs.pop('cv', False)
-        self.weights = kwargs.pop('weights', None).to('cuda') if 'weights' in kwargs else None
+        self.weights = kwargs.pop('weights', None) if 'weights' in kwargs else None
+        if self.weights is not None:
+            self.weights = self.weights.to(self.device)
         super().__init__(*args, **kwargs)
 
     def compute_metrics(self, eval_pred):
@@ -153,12 +155,12 @@ class Model():
 
             # Handle class imbalance in training data
             if self.balanced:
-                df_train = pd.DataFrame({'X': X_train, 'y': y_train})
-                balanced_train = balance_data(df_train)
+                df_train = pd.DataFrame({'text': X_train, self.Sdoh_name: y_train})
+                balanced_train = combine_synthetic_data(df_train)#balance_data(df_train)
 
                 # Convert back to lists if needed
-                list_train_x = balanced_train['X'].tolist()
-                list_train_y = balanced_train['y'].tolist()
+                list_train_x = balanced_train['text'].tolist()
+                list_train_y = balanced_train[self.Sdoh_name].tolist()
             else:
                 list_train_x = X_train.tolist()
                 list_train_y = y_train.tolist()
@@ -200,7 +202,7 @@ class Model():
                 per_device_eval_batch_size=self.batch,
                 evaluation_strategy="epoch",
                 load_best_model_at_end=True,
-                metric_for_best_model='eval_f1'
+                metric_for_best_model='eval_loss'
             )
         
             trainer = CustomTrainer(
@@ -216,7 +218,7 @@ class Model():
                 optimizers=optimizers,
             )
 
-            print(f'Starting Training{" Fold " + str(current_fold) if self.cv else ""}')
+            print(f'Starting Training for {self.Sdoh_name} {" - Fold " + str(current_fold) if self.cv else ""}')
 
             trainer.train()
 

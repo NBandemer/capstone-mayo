@@ -15,10 +15,6 @@ sdoh_to_labels = {
     "behavior_drug": 5
 }
 
-if __name__ == '__main__':
-    generate_synthetic_data()
-    exit(0)
-
 project_base_path = Path(__file__).parent.parent.resolve()
 
 parser = argparse.ArgumentParser(
@@ -95,6 +91,8 @@ if args.eval: #evaluation mode
 
 # Run all models (normal and weighted)
 for (sdoh, labels) in sdoh_to_labels.items():
+    if sdoh == "sdoh_community_present":
+        continue
     set_helper_sdoh(sdoh)
     model = Model(
         Sdoh_name=sdoh, 
@@ -103,26 +101,27 @@ for (sdoh, labels) in sdoh_to_labels.items():
         epochs=int(config.epochs), 
         batch=int(config.batch), 
         project_base_path=project_base_path, 
-        balanced=False, 
-        weighted=True, 
+        balanced=True, 
+        weighted=False, 
         output_dir=config.output, 
         cv=False
     )
     model.train()
-
-for (sdoh, labels) in sdoh_to_labels.items():
-    set_helper_sdoh(sdoh)
-    model = Model(
-        Sdoh_name=sdoh, 
-        num_of_labels=labels, 
-        model_name=config.model, 
-        epochs=int(config.epochs), 
-        batch=int(config.batch), 
-        project_base_path=project_base_path, 
-        balanced=False, 
-        weighted=True, 
-        output_dir=config.output, 
-        cv=False
-    )
     model.test()
+
+# for (sdoh, labels) in sdoh_to_labels.items():
+#     set_helper_sdoh(sdoh)
+#     model = Model(
+#         Sdoh_name=sdoh, 
+#         num_of_labels=labels, 
+#         model_name=config.model, 
+#         epochs=int(config.epochs), 
+#         batch=int(config.batch), 
+#         project_base_path=project_base_path, 
+#         balanced=False, 
+#         weighted=True, 
+#         output_dir=config.output, 
+#         cv=False
+#     )
+#     model.test()
 

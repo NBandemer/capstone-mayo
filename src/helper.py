@@ -16,40 +16,22 @@ import pandas as pd
 import numpy as np
 from huggingface_hub import login
 import accelerate
+from parrot import Parrot
 
 # Synthetic Data
-model = None
+parrot = None
 seed = 42
-tokenizer = None
-HUGGINGFACE_TOKEN = "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"
 
-def generate_synth_data(prompt):
-    input_ids = tokenizer.encode(prompt, return_tensors="pt")
-    input_ids = input_ids.to('cuda')
-    output = model.generate(input_ids, max_length=256, num_beams=1, no_repeat_ngram_size=2, do_sample=False)
-    response = tokenizer.decode(output[0], skip_special_tokens=True)
-    return response
+# def generate_synth_data(prompt):
+#     prompt = prompt.strip()
+#     return response
 
 def prepare_synth():
-    global model, tokenizer
+    global parrot
     warnings.filterwarnings("ignore")
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-
-    login(token=HUGGINGFACE_TOKEN)
-    model_id = "meta-llama/Llama-2-7b-chat-hf"
-    with accelerate.init_empty_weights():
-        fake_model = LlamaForCausalLM.from_pretrained(model_id)
-    
-    device_map = accelerate.infer_auto_device_map(fake_model, max_memory={0: "10.5GiB", "cpu": "10GiB"})
-    model = LlamaForCausalLM.from_pretrained(model_id, device_map=device_map)
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
-    tokenizer.use_default_system_prompt = False
-
-
+    parrot = Parrot(model_tag="prithivida/parrot_paraphraser_on_T5", use_gpu=False)
+  
 plt.ioff()
-
 
 current_sbdh = "sdoh_education"
 
@@ -80,6 +62,14 @@ def set_helper_sdoh(sdoh_name):
     """
     global current_sbdh
     current_sbdh = sdoh_name
+
+def combine_synthetic_data(df):
+    """
+    This function combines the synthetic data with the original data
+    """
+    synthetic_data = pd.read_csv(f"data/test_train_split/{current_sbdh}/train_synthesized.csv")
+    combined_data = pd.concat([df, synthetic_data], ignore_index=True)
+    return combined_data.sample(frac=1).reset_index(drop=True)
 
 def balance_data(df):
     values = df['y'].value_counts()
@@ -337,33 +327,33 @@ def plot_roc(curves, roc_dir, sdoh_name):
     plt.savefig(f'{roc_dir}/roc_graph.jpg')
     plt.close()
     
-# def paraphrase(text, by_sentence=True, max_synths=2):
-#     import re
+def paraphrase(text, by_sentence=True, max_synths=1):
+    import re
 
-#     para_text = ""
-#     para_texts = []
+    para_text = ""
+    para_texts = []
 
-#     if not by_sentence:
-#         para_phrases = parrot.augment(input_phrase=text, max_length=128, fluency_threshold=0.25, adequacy_threshold=0.94, max_return_phrases=max_synths)
-#         if para_phrases is not None and len(para_phrases) > 0 and para_phrases[0][0] is not None and text != para_phrases[0][0]:  
-#             phrase_tuples = para_phrases[:max_synths]
-#             for phrase_tuple in phrase_tuples:
-#                 para_texts.append(phrase_tuple[0])
-#     else:
-#         sentences = re.split(r'[,.;!?]\s*', text)
-#         for idx, sentence in enumerate(sentences):
-#             if idx == 0 and sentence.startswith("social history"):
-#                 sentence = sentence[16:]
-#             para_phrases = parrot.augment(input_phrase=sentence, max_length=128, fluency_threshold=0.5, adequacy_threshold=0.94 )
-#             if para_phrases is not None and len(para_phrases) > 0 and para_phrases[0] is not None:  
-#                 para_sentence = para_phrases[0][0]   
-#             else:
-#                 para_sentence = sentence
-#             if idx != 0:
-#                 para_text += ', ' + para_sentence
-#             else:
-#                 para_text += para_sentence
-#     return para_texts if len(para_texts) > 0 else para_text if para_text != "" else text
+    if not by_sentence:
+        para_phrases = parrot.augment(input_phrase=text, max_length=128, fluency_threshold=0.25, adequacy_threshold=0.94, max_return_phrases=max_synths)
+        if para_phrases is not None and len(para_phrases) > 0 and para_phrases[0][0] is not None and text != para_phrases[0][0]:  
+            phrase_tuples = para_phrases[:max_synths]
+            for phrase_tuple in phrase_tuples:
+                para_texts.append(phrase_tuple[0])
+    else:
+        sentences = re.split(r'[,.;!?]\s*', text)
+        for idx, sentence in enumerate(sentences):
+            if idx == 0 and sentence.startswith("social history"):
+                sentence = sentence[16:]
+            para_phrases = parrot.augment(input_phrase=sentence, max_length=64, fluency_threshold=0.5, adequacy_threshold=0.94 )
+            if para_phrases is not None and len(para_phrases) > 0 and para_phrases[0] is not None:  
+                para_sentence = para_phrases[0][0]   
+            else:
+                para_sentence = sentence
+            if idx != 0:
+                para_text += ', ' + para_sentence
+            else:
+                para_text += para_sentence
+    return para_texts if len(para_texts) > 0 else para_text if para_text != "" else text
 
 def synthesize_data(original_data, sdoh_name, num_synths=2):
     """
@@ -377,14 +367,14 @@ def synthesize_data(original_data, sdoh_name, num_synths=2):
         text = str(row['text'])
         class_val = row[sdoh_name]
 
-        generic_prompt = "Paraphrase the following medical discharge summary while preserving any information relevant to the patient's social determinants of health, such as education, economics, environment, and substance use (alcohol, tobacco, and drug use). The note should keep a similar format and style as the original, but can swap words and phrases around and use synonyms. \n\n"
+        # generic_prompt = "Paraphrase the following medical discharge summary while preserving any information relevant to the patient's social determinants of health, such as education, economics, environment, and substance use (alcohol, tobacco, and drug use). The note should keep a similar format and style as the original, but can swap words and phrases around and use synonyms. \n\n"
         
         synth_texts = []
 
-        for _ in range(num_synths):
-            synth_text = generate_synth_data(generic_prompt + text)
-            new_row = {'text': synth_text, sdoh_name: class_val}
-            synth_texts.append(new_row)
+        # for _ in range(num_synths):
+        synth_text = paraphrase(text)
+        new_row = {'text': synth_text, sdoh_name: class_val}
+        synth_texts.append(new_row)
 
         new_df = pd.DataFrame(synth_texts)
         df_synth = pd.concat([df_synth, new_df], ignore_index=True)
@@ -399,7 +389,7 @@ def generate_synthetic_data():
         # 'behavior_drug': [1,2,4],
         # 'behavior_tobacco': [4],
         # 'sdoh_community_absent': [1],
-        'sdoh_economics': [1,2], #TODO: Check if this is correct
+        'sdoh_economics': [1], #TODO: Check if this is correct
         'sdoh_education': [1],
         'sdoh_environment': [2],
     }
