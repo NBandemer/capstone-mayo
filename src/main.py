@@ -90,9 +90,25 @@ if args.eval: #evaluation mode
 #     model.train()
 
 # Run all models (normal and weighted)
+# for (sdoh, labels) in sdoh_to_labels.items():
+#     if sdoh == "sdoh_community_present" or sdoh == "sdoh_community_absent":
+#         continue
+#     set_helper_sdoh(sdoh)
+#     model = Model(
+#         Sdoh_name=sdoh, 
+#         num_of_labels=labels, 
+#         model_name=config.model, 
+#         epochs=int(config.epochs), 
+#         batch=int(config.batch), 
+#         project_base_path=project_base_path, 
+#         balanced=True, 
+#         weighted=False, 
+#         output_dir=config.output, 
+#         cv=False
+#     )
+#     model.train()
+
 for (sdoh, labels) in sdoh_to_labels.items():
-    if sdoh == "sdoh_community_present":
-        continue
     set_helper_sdoh(sdoh)
     model = Model(
         Sdoh_name=sdoh, 
@@ -106,22 +122,5 @@ for (sdoh, labels) in sdoh_to_labels.items():
         output_dir=config.output, 
         cv=False
     )
-    model.train()
     model.test()
-
-# for (sdoh, labels) in sdoh_to_labels.items():
-#     set_helper_sdoh(sdoh)
-#     model = Model(
-#         Sdoh_name=sdoh, 
-#         num_of_labels=labels, 
-#         model_name=config.model, 
-#         epochs=int(config.epochs), 
-#         batch=int(config.batch), 
-#         project_base_path=project_base_path, 
-#         balanced=False, 
-#         weighted=True, 
-#         output_dir=config.output, 
-#         cv=False
-#     )
-#     model.test()
 
