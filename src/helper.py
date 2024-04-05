@@ -285,10 +285,10 @@ def plot_metric_from_tensor(log_dir, save_dir):
     plt.close()
 
 def plot_roc(curves, roc_dir, sdoh_name):
-    fig = plt.figure()
+    fig = plt.figure(constrained_layout=True)
     
     # Create a grid for the plots
-    gs = gridspec.GridSpec(2, 1, height_ratios=[8, 1]) 
+    gs = gridspec.GridSpec(3, 1, height_ratios=[6, 2, 2]) 
 
     # Create the ROC curve plot
     ax0 = plt.subplot(gs[0])
@@ -321,8 +321,27 @@ def plot_roc(curves, roc_dir, sdoh_name):
     # Add a table at the bottom of the axes
     ax1.table(cellText=cell_text, colLabels=columns, loc='center')
 
+    # Prepare data for the ROC scores table
+    columns = ['Estimator', 'ROC Score']
+    roc_text = []
+
+    for display, _ in curves:
+        # Add data to the table
+        roc_text.append([display.estimator_name, f'{display.roc_auc:.4f}'])
+
+    # Create the ROC scores table plot
+    ax2 = plt.subplot(gs[2])
+
+    # Remove axis for the ROC scores table subplot
+    ax2.axis('off')
+
+    # Add a ROC scores table at the bottom of the axes
+    ax2.table(cellText=roc_text, colLabels=columns, loc='center')
+
     # Adjust the spacing between subplots
     fig.subplots_adjust(hspace=0.5)  # Increase this value to add more space
+
+    plt.tight_layout()
 
     plt.savefig(f'{roc_dir}/roc_graph.jpg')
     plt.close()
