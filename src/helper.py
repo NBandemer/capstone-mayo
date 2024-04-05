@@ -198,7 +198,7 @@ def compute_metrics(eval_pred, cv=False, test=True):
     # Metrics based on predicted probabilities
     # Multi class AUC score 
     if num_classes > 2:
-        auc = roc_auc_score(labels, preds_probs, average='weighted', multi_class='ovr')
+        auc = roc_auc_score(labels, preds_probs, average=None, multi_class='ovr')
     else:
         greater_class_prob = preds_probs[:, 1]
         auc = roc_auc_score(labels, greater_class_prob, average='weighted', multi_class='ovr')
@@ -213,7 +213,7 @@ def compute_metrics(eval_pred, cv=False, test=True):
         if num_classes > 2:
             for i in range(num_classes):
                 fpr, tpr, thresholds = roc_curve(labels, preds_probs[:, i], pos_label=i)
-                display = metrics.RocCurveDisplay(fpr=fpr, tpr=tpr, roc_auc=auc, estimator_name=f'{current_sbdh}_{current_sbdh_dict[i]}')
+                display = metrics.RocCurveDisplay(fpr=fpr, tpr=tpr, roc_auc=auc[i], estimator_name=f'{current_sbdh}_{current_sbdh_dict[i]}')
                 best_threshold = thresholds[np.argmax(tpr - fpr)]
                 curves.append((display, best_threshold))
         else:

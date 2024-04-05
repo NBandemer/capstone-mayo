@@ -117,7 +117,7 @@ for (sdoh, labels) in sdoh_to_labels.items():
         epochs=int(config.epochs), 
         batch=int(config.batch), 
         project_base_path=project_base_path, 
-        balanced=True, 
+        balanced=False, 
         weighted=False, 
         output_dir=config.output, 
         cv=False
