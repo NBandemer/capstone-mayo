@@ -84,10 +84,10 @@ model = Model(config.sdoh, sdoh_to_labels[config.sdoh], config.model, int(config
 
 if args.eval: #evaluation mode
     model.test()
-# else:
-#     print(f'Training model for {config.sdoh}... with balanced: {config.balanced} and weighted: {config.weighted}...')
-#     print('Cross Validation: ', config.cv)
-#     model.train()
+else:
+    print(f'Training model for {config.sdoh}... with balanced: {config.balanced} and weighted: {config.weighted}...')
+    print('Cross Validation: ', config.cv)
+    model.train()
 
 # Run all models (normal and weighted)
 # for (sdoh, labels) in sdoh_to_labels.items():
@@ -108,19 +108,19 @@ if args.eval: #evaluation mode
 #     )
 #     model.train()
 
-for (sdoh, labels) in sdoh_to_labels.items():
-    set_helper_sdoh(sdoh)
-    model = Model(
-        Sdoh_name=sdoh, 
-        num_of_labels=labels, 
-        model_name=config.model, 
-        epochs=int(config.epochs), 
-        batch=int(config.batch), 
-        project_base_path=project_base_path, 
-        balanced=False, 
-        weighted=False, 
-        output_dir=config.output, 
-        cv=False
-    )
-    model.test()
+# for (sdoh, labels) in sdoh_to_labels.items():
+#     set_helper_sdoh(sdoh)
+#     model = Model(
+#         Sdoh_name=sdoh, 
+#         num_of_labels=labels, 
+#         model_name=config.model, 
+#         epochs=int(config.epochs), 
+#         batch=int(config.batch), 
+#         project_base_path=project_base_path, 
+#         balanced=False, 
+#         weighted=False, 
+#         output_dir=config.output, 
+#         cv=False
+#     )
+#     model.test()
 

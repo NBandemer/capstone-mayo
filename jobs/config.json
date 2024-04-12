@@ -4,8 +4,8 @@
     "data": "../data/PREPROCESSED-NOTES-NEW.csv",
     "batch": 32,
     "epochs": 15,
-    "balanced": true,
-    "weighted": false,
+    "balanced": false,
+    "weighted": true,
     "output": "E:/",
     "cv": false
 }

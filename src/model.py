@@ -18,6 +18,8 @@ import shutil
 import os
 
 from helper import *
+import re
+
 
 class MIMICDataset(Dataset):
     def __init__(self, encodings, labels):
@@ -44,7 +46,7 @@ class CustomTrainer(Trainer):
         self.cv = kwargs.pop('cv', False)
         self.weights = kwargs.pop('weights', None) if 'weights' in kwargs else None
         if self.weights is not None:
-            self.weights = self.weights.to(self.device)
+            self.weights = self.weights.to("cuda")
         super().__init__(*args, **kwargs)
 
     def compute_metrics(self, eval_pred):
@@ -116,7 +118,7 @@ class Model():
 
         # Training constants
         MAX_LENGTH = 128 
-        early_stopping = EarlyStoppingCallback(early_stopping_patience=2)
+        early_stopping = EarlyStoppingCallback(early_stopping_patience=4)
         current_fold = 1
 
         if self.weighted:
@@ -167,6 +169,12 @@ class Model():
 
             list_val_x = X_val.tolist()
             list_val_y = y_val.tolist()
+
+            # for i in range(len(list_train_x)):
+            #     list_train_x[i] = preprocess_text(list_train_x[i])
+            
+            # for i in range(len(list_val_x)):
+            #     list_val_x[i] = preprocess_text(list_val_x[i])
 
             # Truncate and tokenize your input data
             train_encodings = self.tokenizer(list_train_x, truncation=True, padding='max_length', max_length=MAX_LENGTH, return_tensors='pt')
@@ -246,11 +254,11 @@ class Model():
                 graph_dir += 'balanced/'
                 save_dir += 'balanced/'
             elif self.weighted:
-                graph_dir += 'weighted/'
-                save_dir += 'weighted/'
+                graph_dir += 'weighted_new/'
+                save_dir += 'weighted_new/'
             else:
-                graph_dir += 'standard/'
-                save_dir += 'standard/'
+                graph_dir += 'standard_new/'
+                save_dir += 'standard_new/'
 
             graph_dir += self.Sdoh_name
             save_dir += self.Sdoh_name
@@ -277,9 +285,12 @@ class Model():
 
             cv_path = os.path.join(self.project_base_path, f'test_results/cv/')
             if self.balanced:
-                cv_path += 'balanced/'
+                cv_path += 'balanced_new/'
             elif self.weighted:
-                cv_path += 'weighted/'
+                cv_path += 'weighted_new/'
+            else:
+                cv_path += 'standard_new/'
+                
             os.makedirs(cv_path, exist_ok=True)
             
             df = pd.DataFrame(df_data)
@@ -326,9 +337,9 @@ class Model():
         if self.balanced:
             sdoh_dir += 'balanced/'
         elif self.weighted:
-            sdoh_dir += 'weighted/'
+            sdoh_dir += 'weighted_new/'
         else:
-            sdoh_dir += 'standard/'
+            sdoh_dir += 'standard_new/'
             
         sdoh_dir += self.Sdoh_name
         results_dir = os.path.join(self.project_base_path, f'test_results/{sdoh_dir}')

@@ -102,7 +102,7 @@ def test_train_split(base_path, data):
     """
     dataset = pd.read_csv(data)
 
-    text_data = dataset["text"].to_list()
+    text_data = dataset["TEXT"].to_list()
 
     sdoh_data = {
         "sdoh_community_present": dataset["sdoh_community_present"].to_list(),
@@ -123,7 +123,7 @@ def test_train_split(base_path, data):
 
         # Split data for the current category
         X_train, X_val, y_train, y_val = train_test_split(
-            text_data, data, random_state=0, train_size=0.8, stratify=data
+            text_data, data, random_state=42, train_size=0.8, stratify=data
         )
 
         # Save train and test data to seprate csvs
@@ -191,7 +191,7 @@ def compute_metrics(eval_pred, cv=False, test=True):
         current_sbdh_dict = sbdh_econ_env
     else:
         current_sbdh_dict = sbdh_community_ed
-
+    
     report = classification_report(labels, preds, target_names=current_sbdh_dict.values(), output_dict=True)
     report_df = pd.DataFrame(report).transpose()
 
@@ -214,7 +214,7 @@ def compute_metrics(eval_pred, cv=False, test=True):
             for i in range(num_classes):
                 fpr, tpr, thresholds = roc_curve(labels, preds_probs[:, i], pos_label=i)
                 display = metrics.RocCurveDisplay(fpr=fpr, tpr=tpr, roc_auc=auc[i], estimator_name=f'{current_sbdh}_{current_sbdh_dict[i]}')
-                best_threshold = thresholds[np.argmax(tpr - fpr)]
+                best_threshold = thresholds[np.argmax(tpr - fpr)] #TODO: roc_utils
                 curves.append((display, best_threshold))
         else:
             fpr, tpr, thresholds = roc_curve(labels, greater_class_prob, pos_label=1)
@@ -359,9 +359,10 @@ def paraphrase(text, by_sentence=True, max_synths=1):
             for phrase_tuple in phrase_tuples:
                 para_texts.append(phrase_tuple[0])
     else:
+        # Test a number of sentences for each SDOH and validating the paraphrasing
         sentences = re.split(r'[,.;!?]\s*', text)
         for idx, sentence in enumerate(sentences):
-            if idx == 0 and sentence.startswith("social history"):
+            if idx == 0 and sentence.startswith("social history"): #TODO: Remove
                 sentence = sentence[16:]
             para_phrases = parrot.augment(input_phrase=sentence, max_length=64, fluency_threshold=0.5, adequacy_threshold=0.94 )
             if para_phrases is not None and len(para_phrases) > 0 and para_phrases[0] is not None:  
