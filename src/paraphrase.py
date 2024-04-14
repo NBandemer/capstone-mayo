@@ -39,37 +39,19 @@ def paraphrase(
     return res
 
 def paraphrase_and_combine(row):
-    # Split the row into two parts based on 'social history:'
-    parts = row.split('social history: ')
-    parts = [part.strip() for part in parts if part.strip()]
+    # Split each part into sentences based on ';' and '.'
+    sentences = re.split('; |\\. ', row)
+    sentences = [sentence.strip() for sentence in sentences if sentence.strip()]
 
-    paraphrased_parts = []
-    for part in parts:
-        # Split each part into sentences based on ';' and '.'
-        sentences = re.split('; |\\. ', part)
-        sentences = [sentence.strip() for sentence in sentences if sentence.strip()]
-
-        # Paraphrase each sentence and combine them
-        paraphrased_sentences = [' '.join(paraphrase(sentence)) for sentence in sentences]
-        paraphrased_part = '; '.join(paraphrased_sentences)
-
-        # Add 'social history:' back to the paraphrased part
-        paraphrased_parts.append('social history: ' + paraphrased_part)
+    # Paraphrase each sentence and combine them
+    paraphrased_sentences = [' '.join(paraphrase(sentence)) for sentence in sentences]
 
     # Combine the paraphrased parts into one row
-    return '  '.join(paraphrased_parts)
-
-def para_whole(row):
-    row = str(row)
-    generic_prompt = f"Paraphrase the following medical discharge summary while preserving any information relevant to the patient's social determinants of health, such as education, economics, environment, and substance use (alcohol, tobacco, and drug use). The note should keep a similar format and style as the original, but can swap words and phrases around and use synonyms: {row}"
-
-    sentence = row
-
-    return paraphrase(sentence)
+    return ' '.join(paraphrased_sentences)
 
 df = pd.read_csv("C:\\Users\\manav\\OneDrive\\Desktop\\capstone-mayo\\data\\SOCIALHISTORIES.csv")
 
-print(df['TEXT'][2])
+index = 2
+print(df['TEXT'][index])
 print("---------------------------------------- New Text --------------------------------------------")
-# print(paraphrase_and_combine(df['TEXT'][2]))
-print(para_whole(df['TEXT'][2]))
+print(paraphrase_and_combine(df['TEXT'][index]))
