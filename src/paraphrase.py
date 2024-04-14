@@ -18,7 +18,7 @@ def paraphrase(
     diversity_penalty=3.0,
     no_repeat_ngram_size=2,
     temperature=0.7,
-    max_length=900
+    max_length=128
 ):
     input_ids = tokenizer(
         f"{question}",
@@ -49,9 +49,9 @@ def paraphrase_and_combine(row):
     # Combine the paraphrased parts into one row
     return ' '.join(paraphrased_sentences)
 
-df = pd.read_csv("C:\\Users\\manav\\OneDrive\\Desktop\\capstone-mayo\\data\\SOCIALHISTORIES.csv")
+# df = pd.read_csv("C:\\Users\\manav\\OneDrive\\Desktop\\capstone-mayo\\data\\SOCIALHISTORIES.csv")
 
-index = 2
-print(df['TEXT'][index])
-print("---------------------------------------- New Text --------------------------------------------")
-print(paraphrase_and_combine(df['TEXT'][index]))
+# index = 2
+# print(df['TEXT'][index])
+# print("---------------------------------------- New Text --------------------------------------------")
+# print(paraphrase_and_combine(df['TEXT'][index]))
