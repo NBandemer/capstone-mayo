@@ -76,19 +76,30 @@ def click_button():
         text_area.delete(1.0, tk.END)
         text_area.insert(tk.END, "Number out of range")
     else:
-        text_area.delete(1.0, tk.END)
+        clean_ui()
         note = notes.iloc[number]
         text = note['TEXT']
+        text_area.delete(1.0, tk.END)
+        text_area.insert(tk.END, text)
         classify_note(note)
         begin_ui_update(note)
-        text_area.insert(tk.END, text)
     print(f"Number: {number}")
 
 labels_text = list(sdoh_to_labels.keys())
-
-#TODO: This function should be called 8 times, once for each SDOH instead of all at once
-#TODO: Left-indent label above images
+text_labels, image_labels, classes_labels = [], [], []
+#TODO: Convert ui update to async
 #TODO: Fix the layout
+
+def clean_ui():
+    for label in text_labels:
+        label.destroy()
+    for label in image_labels:
+        label.destroy()
+    for label in classes_labels:
+        label.destroy()
+    text_labels.clear()
+    image_labels.clear()
+    classes_labels.clear()
 
 def begin_ui_update(note):
     if note is not None:
@@ -97,6 +108,8 @@ def begin_ui_update(note):
             update_ui(note, sdoh)
 
 def update_ui(note, sdoh):
+    global text_labels, image_labels, classes_labels
+
     text_label = Label(content_frame, text=f"{sdoh}", font=("Arial", 20))
     image_label = Label(content_frame, text=sdoh)
     model = sdoh_to_models[sdoh]
@@ -115,9 +128,13 @@ def update_ui(note, sdoh):
         photo = ImageTk.PhotoImage(image)
         image_label.image = photo
         image_label.config(image=image_label.image)
-    text_label.pack()
-    classes_label.pack()
+    text_label.pack(anchor='w')
+    classes_label.pack(anchor='w')
     image_label.pack()
+    text_labels.append(text_label) 
+    image_labels.append(image_label)
+    classes_labels.append(classes_label)
+
 
 root = tk.Tk()
 root.title("SDOH Classifier")
@@ -158,7 +175,7 @@ button.config(command=click_button)
 label2 = Label(content_frame, text="Text")
 label2.pack()
 
-text_area = Text(content_frame, height=5, width=40)
+text_area = Text(content_frame, height=5, width=100)
 text_area.insert(tk.END, "Display the note corresponding to the note number specified above")
 text_area.pack()
 
