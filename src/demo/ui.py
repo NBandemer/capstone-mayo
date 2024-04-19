@@ -8,7 +8,7 @@ from html_render import lime_analyze
 from PIL import Image, ImageTk
 
 notes = pd.read_csv("C:\\Users\\xxnan\\Code\\capstone-mayo\\data\\SOCIALHISTORIES.csv")
-saved_model_dir = "C:\\Users\\xxnan\\Code\\capstone-mayo\\saved_models\\standard"
+saved_model_dir = "C:\\Users\\xxnan\\Code\\capstone-mayo\\saved_models\\standard_new"
 model_name = "emilyalsentzer/Bio_ClinicalBERT"
 tokenizer = AutoTokenizer.from_pretrained(model_name, do_lower_case=True)
 note = None
@@ -97,10 +97,17 @@ def begin_ui_update(note):
             update_ui(note, sdoh)
 
 def update_ui(note, sdoh):
-    text_label = Label(content_frame, text=f"{sdoh}", justify='left', font=("Arial", 20))
+    text_label = Label(content_frame, text=f"{sdoh}", font=("Arial", 20))
     image_label = Label(content_frame, text=sdoh)
     model = sdoh_to_models[sdoh]
-    img_path = lime_analyze(note, sdoh, model, tokenizer)
+    current_sdbh_dict, img_path = lime_analyze(note, sdoh, model, tokenizer)
+    actual_label = int(true_labels[sdoh])
+    actual_label_name = current_sdbh_dict[actual_label]
+    pred_label = int(results[sdoh])
+    pred_label_name = current_sdbh_dict[pred_label]
+
+    classes_label = Label(content_frame, text=f"Actual: {actual_label_name}, Predicted: {pred_label_name}", font=("Arial", 16))
+
     if os.path.exists(img_path):
         # imgkit.from_file(img_path, f"{sdoh}.jpg")
         image = Image.open(img_path)
@@ -109,6 +116,7 @@ def update_ui(note, sdoh):
         image_label.image = photo
         image_label.config(image=image_label.image)
     text_label.pack()
+    classes_label.pack()
     image_label.pack()
 
 root = tk.Tk()

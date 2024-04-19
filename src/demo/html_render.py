@@ -42,7 +42,7 @@ sdoh_class_names = []
 current_sbdh_dict = None
 
 def init(sdoh, m, t):
-    global sdoh_class_names, model, tokenizer
+    global sdoh_class_names, model, tokenizer, current_sbdh_dict
 
     model = m
     tokenizer = t
@@ -93,7 +93,8 @@ def lime_analyze(sample, sdoh, model, tokenizer):
     explanation = explainer.explain_instance(text, predict_proba, num_features=num_features, num_samples=500, labels=labels_to_explain)
     
     explanation.save_to_file(f'C:\\Users\\xxnan\\Code\\capstone-mayo\\src\\demo\\{sdoh}.html')
-    return render_lime(sdoh)
+    path = render_lime(sdoh)
+    return current_sbdh_dict, path
 
 def render_lime(sdoh):
     # Specify the path to your HTML file
