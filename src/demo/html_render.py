@@ -39,7 +39,6 @@ sdoh_to_labels = {
 }
 
 sdoh_class_names = []
-explainer = LimeTextExplainer(class_names=sdoh_class_names)
 current_sbdh_dict = None
 
 def init(sdoh, m, t):
@@ -89,6 +88,8 @@ def lime_analyze(sample, sdoh, model, tokenizer):
         labels_to_explain = (pred_label,)
 
     num_features = 5 if len(text.split()) >= 5 else len(text.split())
+
+    explainer = LimeTextExplainer(class_names=sdoh_class_names)
     explanation = explainer.explain_instance(text, predict_proba, num_features=num_features, num_samples=500, labels=labels_to_explain)
     
     explanation.save_to_file(f'C:\\Users\\xxnan\\Code\\capstone-mayo\\src\\demo\\{sdoh}.html')

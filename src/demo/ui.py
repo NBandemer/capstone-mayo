@@ -1,6 +1,6 @@
 import os
 import tkinter as tk
-from tkinter import Text, Label, Entry
+from tkinter import Canvas, Frame, Scrollbar, Text, Label, Entry
 import imgkit
 import pandas as pd
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, TextClassificationPipeline
@@ -80,54 +80,80 @@ def click_button():
         note = notes.iloc[number]
         text = note['TEXT']
         classify_note(note)
-        update_ui(note)
+        begin_ui_update(note)
         text_area.insert(tk.END, text)
     print(f"Number: {number}")
 
 labels_text = list(sdoh_to_labels.keys())
 
-def update_ui(note):
+#TODO: This function should be called 8 times, once for each SDOH instead of all at once
+#TODO: Left-indent label above images
+#TODO: Fix the layout
+
+def begin_ui_update(note):
     if note is not None:
         for i in range(8):
             sdoh = labels_text[i]
-            label = Label(root, text=sdoh)
-            model = sdoh_to_models[sdoh]
-            img_path = lime_analyze(note, sdoh, model, tokenizer)
-            if os.path.exists(img_path):
-                # imgkit.from_file(img_path, f"{sdoh}.jpg")
-                image = Image.open(img_path)
-                photo = ImageTk.PhotoImage(image)
-                label.image = photo
-                label.config(image=label.image)
-            label.pack()
+            update_ui(note, sdoh)
+
+def update_ui(note, sdoh):
+    text_label = Label(content_frame, text=f"{sdoh}", justify='left', font=("Arial", 20))
+    image_label = Label(content_frame, text=sdoh)
+    model = sdoh_to_models[sdoh]
+    img_path = lime_analyze(note, sdoh, model, tokenizer)
+    if os.path.exists(img_path):
+        # imgkit.from_file(img_path, f"{sdoh}.jpg")
+        image = Image.open(img_path)
+        image = image.crop((0, 0, image.width - 25, image.height - 25))
+        photo = ImageTk.PhotoImage(image)
+        image_label.image = photo
+        image_label.config(image=image_label.image)
+    text_label.pack()
+    image_label.pack()
 
 root = tk.Tk()
-root.title("UI Example")
+root.title("SDOH Classifier")
 root.resizable(True, True)
 
-# Top part with label and text field for a number
-label1 = Label(root, text="Enter a number between 0 - 7025")
+# Create a main frame
+main_frame = Frame(root)
+main_frame.pack(fill="both", expand=1)
+
+# Create a canvas
+my_canvas = Canvas(main_frame)
+my_canvas.pack(side="left", fill="both", expand=1)
+
+# Add a scrollbar to the canvas
+my_scrollbar = Scrollbar(main_frame, orient="vertical", command=my_canvas.yview)
+my_scrollbar.pack(side="right", fill="y")
+
+# Configure the canvas
+my_canvas.configure(yscrollcommand=my_scrollbar.set)
+my_canvas.bind('<Configure>', lambda e: my_canvas.configure(scrollregion = my_canvas.bbox("all")))
+
+# Create another frame inside the canvas
+content_frame = Frame(my_canvas)
+# Add that new frame to a window in the canvas
+my_canvas.create_window((0,0), window=content_frame, anchor="nw")
+
+# Range of 0-7023 for possible notes to try from dataset
+label1 = Label(content_frame, text="Enter a number between 0 - 7023")
 label1.pack()
-entry1 = Entry(root)
+entry1 = Entry(content_frame)
 entry1.pack()
 
-button = tk.Button(root, text="Submit")
+button = tk.Button(content_frame, text="Submit")
 button.pack()
 button.config(command=click_button)
 
 # Second part with textarea
-label2 = Label(root, text="Text")
+label2 = Label(content_frame, text="Text")
 label2.pack()
 
-text_area = Text(root, height=5, width=40)
+text_area = Text(content_frame, height=5, width=40)
 text_area.insert(tk.END, "Display the note corresponding to the note number specified above")
 text_area.pack()
 
-# Third section with 8 labels in a 4x2 grid
-
-
-# Last part rendered from an HTML file
-# This part is beyond the scope of Tkinter and would require a different approach or tool
 load_models()
 
 root.mainloop()
