@@ -1,6 +1,16 @@
 import streamlit as st
 import pandas as pd
 from util import preprocess_text, load_models, lime_analyze, classify_note, pred_labels, base_path
+from util import *
+
+def convert_numbers_to_labels(sdoh, label):
+    label = int(label)
+    if sdoh in ['sdoh_community_present', 'sdoh_community_absent', 'sdoh_education']:
+        return sbdh_community_ed[label]
+    elif sdoh in ['sdoh_economics', 'sdoh_environment']:
+        return sbdh_econ_env[label]
+    elif sdoh in ['behavior_alcohol', 'behavior_tobacco', 'behavior_drug']:
+        return sbdh_substance[label]
 
 # Load the models
 load_models()
@@ -9,8 +19,8 @@ load_models()
 results = pd.DataFrame(columns=['Predicted Label', 'Explain'])
 
 # Create a header with a title and explanatory text
-st.title('Classifying SDOHs in Discharge Summaries')
-st.markdown('This is a brief explanation of your project. You can provide more details here.')
+st.title('Classifying SDOHs from Discharge Summaries')
+st.markdown('This is a demo for our Capstone project. You can enter a medical discharge summary below and it would show us the predicted labels for each SDoH. It also shows us the LIME analysis which visually demmonstrates how the model came to the predict the label')
 
 # Create a text area for the note input
 note = st.text_area('Enter note here', '')
@@ -18,12 +28,12 @@ note = st.text_area('Enter note here', '')
 # Create a button for the classification
 if st.button('Classify'):
     # Perform the classification here and update the 'results' DataFrame
-    # For example:
     text = preprocess_text(note)
     classify_note(text)
 
     for sdoh, label in pred_labels.items():
-        results.loc[sdoh] = [label, 'Explain']
+        num_to_label = convert_numbers_to_labels(sdoh, label)
+        results.loc[sdoh] = [num_to_label, 'Explain']
 
     st.write(results)
 
@@ -40,18 +50,6 @@ if st.button('Classify'):
 
         st.markdown('<hr style="border:4px solid gray">', unsafe_allow_html=True)
 
-# Display the results DataFrame
-
-
-# Create buttons for explanations and display the explanation when a button is clicked
-# for index, row in results.iterrows():
-#     row['Explain'] = st.button(f'Explain', key=index)
-
-#     if row['Explain']:
-#         lime_analyze(note, index)
-#         path = get_path_to_explanation(index)
-#         st.image(path)
-
 # Create a footer with acknowledgments
 st.markdown('---')
-st.markdown('**Acknowledgments:** This is where you can acknowledge the contributions of others to your project.')
+st.markdown('**Acknowledgments:** We would like to thank Dr. Imon Banerjee and Dr. Amara Tariq for all their support through out this project.')
