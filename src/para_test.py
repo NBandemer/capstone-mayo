@@ -1,8 +1,9 @@
 import pandas as pd
 import numpy as np
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from paraphrase import paraphrase_and_combine, parrot_paraphrase
 
-from paraphrase import paraphrase_and_combine
+parrot = True
 
 def synthesize_data(original_data, sdoh_name):
     """
@@ -21,8 +22,10 @@ def synthesize_data(original_data, sdoh_name):
         synth_texts = []
 
         # for _ in range(num_synths):
-        
-        synth_text = paraphrase_and_combine(text)
+        if parrot:
+            synth_text = parrot_paraphrase(text)
+        else:
+            synth_text = paraphrase_and_combine(text)
 
         new_row = {'text': synth_text, sdoh_name: class_val}
         synth_texts.append(new_row)

@@ -4,19 +4,17 @@ from sklearn.metrics import ConfusionMatrixDisplay, RocCurveDisplay
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
 from sklearn.utils import compute_class_weight, resample
-from transformers import LlamaForCausalLM, AutoTokenizer, TextIteratorStreamer
 import torch
 from tensorboard.backend.event_processing import event_accumulator
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-import warnings
 import os
 import torch.nn.functional as F
 import pandas as pd
 import numpy as np
 from huggingface_hub import login
-import accelerate
-from parrot import Parrot
+from paraphrasing.paraphrase import paraphrase_and_combine
+import time
 
 # Synthetic Data
 parrot = None
@@ -25,11 +23,6 @@ seed = 42
 # def generate_synth_data(prompt):
 #     prompt = prompt.strip()
 #     return response
-
-def prepare_synth():
-    global parrot
-    warnings.filterwarnings("ignore")
-    parrot = Parrot(model_tag="prithivida/parrot_paraphraser_on_T5", use_gpu=False)
   
 plt.ioff()
 
@@ -346,34 +339,6 @@ def plot_roc(curves, roc_dir, sdoh_name):
     plt.savefig(f'{roc_dir}/roc_graph.jpg')
     plt.close()
     
-def paraphrase(text, by_sentence=True, max_synths=1):
-    import re
-
-    para_text = ""
-    para_texts = []
-
-    if not by_sentence:
-        para_phrases = parrot.augment(input_phrase=text, max_length=128, fluency_threshold=0.25, adequacy_threshold=0.94, max_return_phrases=max_synths)
-        if para_phrases is not None and len(para_phrases) > 0 and para_phrases[0][0] is not None and text != para_phrases[0][0]:  
-            phrase_tuples = para_phrases[:max_synths]
-            for phrase_tuple in phrase_tuples:
-                para_texts.append(phrase_tuple[0])
-    else:
-        # Test a number of sentences for each SDOH and validating the paraphrasing
-        sentences = re.split(r'[,.;!?]\s*', text)
-        for idx, sentence in enumerate(sentences):
-            if idx == 0 and sentence.startswith("social history"): #TODO: Remove
-                sentence = sentence[16:]
-            para_phrases = parrot.augment(input_phrase=sentence, max_length=64, fluency_threshold=0.5, adequacy_threshold=0.94 )
-            if para_phrases is not None and len(para_phrases) > 0 and para_phrases[0] is not None:  
-                para_sentence = para_phrases[0][0]   
-            else:
-                para_sentence = sentence
-            if idx != 0:
-                para_text += ', ' + para_sentence
-            else:
-                para_text += para_sentence
-    return para_texts if len(para_texts) > 0 else para_text if para_text != "" else text
 
 def synthesize_data(original_data, sdoh_name, num_synths=2):
     """
@@ -382,6 +347,7 @@ def synthesize_data(original_data, sdoh_name, num_synths=2):
     df_synth = original_data.copy()
     count = 1
     total = len(original_data)
+    use_new = False
 
     for _, row in original_data.iterrows():
         text = str(row['text'])
@@ -392,7 +358,11 @@ def synthesize_data(original_data, sdoh_name, num_synths=2):
         synth_texts = []
 
         # for _ in range(num_synths):
-        synth_text = paraphrase(text)
+        if use_new:
+            synth_text = paraphrase_and_combine(text)
+        else:
+            synth_text = paraphrase(text)
+
         new_row = {'text': synth_text, sdoh_name: class_val}
         synth_texts.append(new_row)
 
@@ -400,15 +370,17 @@ def synthesize_data(original_data, sdoh_name, num_synths=2):
         df_synth = pd.concat([df_synth, new_df], ignore_index=True)
         print(f"{count}/{total}")
         count += 1
+        if count > 4:
+            break
 
     return df_synth
 
 def generate_synthetic_data():
     imbalanced_sdoh_classes = {
-        # 'behavior_alcohol': [2,4],
-        # 'behavior_drug': [1,2,4],
-        # 'behavior_tobacco': [4],
-        # 'sdoh_community_absent': [1],
+        'behavior_alcohol': [2,4],
+        'behavior_drug': [1,2,4],
+        'behavior_tobacco': [4],
+        'sdoh_community_absent': [1],
         'sdoh_economics': [1], #TODO: Check if this is correct
         'sdoh_education': [1],
         'sdoh_environment': [2],
@@ -426,9 +398,15 @@ def generate_synthetic_data():
 
         # Create synthetic data (default 2 synthetic rows) for each row belong to the imbalanced classes
         synthesized_data = synthesize_data(imbalanced_data, sdoh_name, num_synths=2)
-
+        break
         # test_data = pd.read_csv(f"{data_path}/test.csv")
 
         # Save the resulting synthetic + original data
         synthesized_data.to_csv(f"{data_path}/train_synthesized.csv", index=False)
         # test_data_balanced.to_csv(f"{data_path}/test_synthesized.csv", index=False)
+
+start = time.time()
+generate_synthetic_data()
+end = time.time()
+time = end - start
+print(f"Time taken to generate synthetic data: {time} seconds")

@@ -4,7 +4,7 @@ from tkinter import Canvas, Frame, Scrollbar, Text, Label, Entry
 import imgkit
 import pandas as pd
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, TextClassificationPipeline
-from html_render import lime_analyze
+from demo.util import lime_analyze
 from PIL import Image, ImageTk
 
 notes = pd.read_csv("C:\\Users\\xxnan\\Code\\capstone-mayo\\data\\SOCIALHISTORIES.csv")
